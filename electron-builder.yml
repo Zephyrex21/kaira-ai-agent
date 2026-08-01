@@ -1,0 +1,45 @@
+appId: com.saurabhrajshekhar.kaira
+productName: KAIRA
+copyright: Copyright © 2026 Saurabh Raj Shekhar
+
+directories:
+  output: release
+  buildResources: build
+
+# The backend runs as a separate Node process that serves static files and
+# reads modules from disk, so we keep the app unpacked (no asar) to guarantee
+# those paths resolve identically to development.
+asar: false
+
+files:
+  - electron/**/*
+  - dist/**/*
+  - assets/**/*
+  - package.json
+
+# The PyInstaller-frozen desktop agent (embeds its own Python runtime) is copied
+# verbatim into resources/agent, so the target machine needs no Python.
+extraResources:
+  - from: agent_dist/myraa-agent
+    to: agent
+    filter: ["**/*"]
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: KAIRA
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}

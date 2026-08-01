@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root { color-scheme: dark; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
+      .card {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        border-radius: 20px;
+        background: radial-gradient(120% 120% at 50% 0%, #16161f 0%, #0a0a0f 70%);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        -webkit-app-region: drag;
+      }
+      .logo {
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        background: linear-gradient(120deg, #7c5cff 0%, #48c6ef 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .ring {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        border: 3px solid rgba(255, 255, 255, 0.10);
+        border-top-color: #7c5cff;
+        animation: spin 0.9s linear infinite;
+      }
+      .status { font-size: 13px; color: rgba(255, 255, 255, 0.45); letter-spacing: 0.04em; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo">KAIRA</div>
+      <div class="ring"></div>
+      <div class="status">Starting up…</div>
+    </div>
+  </body>
+</html>

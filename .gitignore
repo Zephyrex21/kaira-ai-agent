@@ -1,0 +1,22 @@
+# Environments
+.env
+.env.local
+
+# Node/Frontend
+node_modules/
+dist/
+build/
+.npm/
+
+# Python/Agent
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.pytest_cache/
+
+# OS/Editor
+.vscode/
+.DS_Store
+Thumbs.db
