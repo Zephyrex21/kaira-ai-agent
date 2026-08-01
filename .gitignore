@@ -20,3 +20,17 @@ env/
 .vscode/
 .DS_Store
 Thumbs.db
+
+
+# Python build artifacts
+agent_build/
+agent_dist/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Python cache
+__pycache__/
+*.pyc
