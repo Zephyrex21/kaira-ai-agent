@@ -1,7 +1,7 @@
 {
-  "autoStart": true,
-  "wakeWordEnabled": true,
-  "wakePhrase": "Kaira",
+  "autoStart": false,
+  "wakeWordEnabled": false,
+  "wakePhrase": "hey kaira",
   "micDeviceId": "",
   "sensitivity": 60,
   "animations": true
