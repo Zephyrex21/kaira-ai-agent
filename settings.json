@@ -4,5 +4,7 @@
   "wakePhrase": "hey kaira",
   "micDeviceId": "",
   "sensitivity": 60,
-  "animations": true
+  "animations": true,
+  "voiceName": "Aoede",
+  "pushToTalkEnabled": false
 }
