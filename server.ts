@@ -14,6 +14,16 @@ import {
 } from "./server_memory";
 import { Memory } from "./src/lib/memoryTypes";
 import {
+  loadReminders,
+  saveReminders,
+  scheduleReminder,
+  cancelScheduledReminder,
+  rehydrateReminders,
+} from "./server_reminders";
+import { Reminder } from "./src/lib/reminderTypes";
+import { loadTodos, saveTodos } from "./server_todos";
+import { Todo } from "./src/lib/todoTypes";
+import {
   DATA_DIR,
   dataFile,
   getGeminiApiKey,
@@ -83,6 +93,12 @@ const DESKTOP_TOOLS: ReadonlySet<string> = new Set([
   // Windows auto-start management (V2)
   "enableAutoStart", "disableAutoStart", "getAutoStartStatus",
 ]);
+
+/** Phase 2: reminders/timers, handled server-side (not routed to the Python agent). */
+const REMINDER_TOOLS: ReadonlySet<string> = new Set(["setReminder", "listReminders", "cancelReminder"]);
+
+/** Phase 2: to-do list, handled server-side (not routed to the Python agent). */
+const TODO_TOOLS: ReadonlySet<string> = new Set(["addTodo", "listTodos", "completeTodo", "removeTodo"]);
 
 /**
  * Call the Python desktop agent.  Returns the parsed JSON response.
@@ -752,9 +768,46 @@ async function startServer() {
     }
   });
 
+  // Phase 2: broadcast a message to every currently-connected client (there's
+  // normally just one, but this is safe if more than one tab is open).
+  function broadcastToClients(message: Record<string, unknown>): void {
+    const payload = JSON.stringify(message);
+    wss.clients.forEach((client) => {
+      if (client.readyState === client.OPEN) client.send(payload);
+    });
+  }
+
+  // Load any reminders left over from a previous run and re-schedule them —
+  // this only fires while this server process is running, same lifetime as
+  // everything else here (not a true OS-level alarm).
+  rehydrateReminders((reminder) => {
+    (async () => {
+      const all = await loadReminders();
+      const updated = all.map((r) => (r.id === reminder.id ? { ...r, fired: true } : r));
+      await saveReminders(updated);
+      broadcastToClients({ type: "reminderFired", reminder });
+    })();
+  }).catch((err) => console.error("[Reminders] Rehydrate failed:", err));
+
   // Handle client WebSocket Connection
   wss.on("connection", async (clientWs) => {
     console.log("Client WebSocket connected to /live");
+
+    // Phase 2: catch up on any reminders that came due while no client was
+    // connected to hear about it (broadcastToClients has no one to reach).
+    (async () => {
+      const all = await loadReminders();
+      const now = Date.now();
+      const missed = all.filter((r) => !r.fired && new Date(r.dueAt).getTime() <= now);
+      if (missed.length > 0) {
+        const updated = all.map((r) => (missed.some((m) => m.id === r.id) ? { ...r, fired: true } : r));
+        await saveReminders(updated);
+        for (const r of missed) {
+          clientWs.send(JSON.stringify({ type: "reminderFired", reminder: r, missed: true }));
+        }
+      }
+    })().catch((err) => console.error("[Reminders] Catch-up check failed:", err));
+
     const apiKey = getGeminiApiKey();
 
     if (!apiKey) {
@@ -845,9 +898,11 @@ async function startServer() {
         "   - BRIGHTNESS: Use 'brightnessUp', 'brightnessDown', 'setBrightness' when the user asks to change screen brightness. Respond naturally: 'Alright, I've turned up the brightness for you.'\n" +
         "   - AUTO-START: Use 'enableAutoStart' when the user wants KAIRA to start with Windows, 'disableAutoStart' to remove it, 'getAutoStartStatus' to check. Explain what you're doing.\n" +
         "   - SETTINGS: The user can also configure these in the SETTINGS panel in the UI. If they mention settings, let them know they can adjust them there too.\n" +
-        "12. YOUR CREATOR: You were built and designed by Saurabh Raj Shekhar — a Computer Science (Data Science) student and developer (GitHub: github.com/Zephyrex21). If TECH or anyone else asks who made you, who built you, who created you, or who your developer/owner is, answer warmly and proudly that Saurabh Raj Shekhar created and built you.";
+        "12. YOUR CREATOR: You were built and designed by Saurabh Raj Shekhar — a Computer Science (Data Science) student and developer (GitHub: github.com/Zephyrex21). If TECH or anyone else asks who made you, who built you, who created you, or who your developer/owner is, answer warmly and proudly that Saurabh Raj Shekhar created and built you.\n" +
+        "13. LIVE WEB SEARCH: You have real-time Google Search access built in. Use it naturally whenever a question needs current information — news, prices, scores, weather, facts past your training, anything time-sensitive. You don't need to announce that you're searching; just answer with the up-to-date result.";
 
-      const finalInstructions = formatSystemInstructionsWithMemories(baseInstructions, memories);
+      const finalInstructions = formatSystemInstructionsWithMemories(baseInstructions, memories) +
+        `\n\n=== CURRENT DATE & TIME ===\nRight now it is ${new Date().toString()}. Use this as your reference point whenever you compute a reminder or timer due-time from a relative phrase like "in 10 minutes" or "tomorrow at 9am".\n===========================\n`;
 
       // Track running transcription state for auto memory consolidation
       let dialogueHistory: { role: string; text: string }[] = [];
@@ -1034,6 +1089,74 @@ async function startServer() {
                       }
                     },
                     required: ["category", "text"]
+                  }
+                },
+
+                // ======== PHASE 2: REMINDERS / TIMERS ========
+                {
+                  name: "setReminder",
+                  description: "Sets a reminder or timer that will fire at a specific time, even if the user closes this conversation (as long as Kaira's server keeps running). Compute dueAtISO yourself from the user's phrase and the current date/time given in your instructions.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      text: { type: Type.STRING, description: "What to remind the user about." },
+                      dueAtISO: { type: Type.STRING, description: "Exact ISO 8601 timestamp for when this should fire, e.g. 2026-08-02T15:30:00.000Z" }
+                    },
+                    required: ["text", "dueAtISO"]
+                  }
+                },
+                {
+                  name: "listReminders",
+                  description: "Lists all reminders/timers that haven't fired yet.",
+                  parameters: { type: Type.OBJECT, properties: {} }
+                },
+                {
+                  name: "cancelReminder",
+                  description: "Cancels a pending reminder/timer by its id (get the id from listReminders first, or cancel the most recent match by text).",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING, description: "The reminder id to cancel. Optional if textMatch is given." },
+                      textMatch: { type: Type.STRING, description: "A snippet of the reminder text to find and cancel, if the id isn't known." }
+                    }
+                  }
+                },
+
+                // ======== PHASE 2: TO-DO LIST ========
+                {
+                  name: "addTodo",
+                  description: "Adds an item to the user's to-do list.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: { text: { type: Type.STRING, description: "The task to add." } },
+                    required: ["text"]
+                  }
+                },
+                {
+                  name: "listTodos",
+                  description: "Lists the user's to-do items, including which are already done.",
+                  parameters: { type: Type.OBJECT, properties: {} }
+                },
+                {
+                  name: "completeTodo",
+                  description: "Marks a to-do item as done, matched by id or a snippet of its text.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING, description: "The todo id. Optional if textMatch is given." },
+                      textMatch: { type: Type.STRING, description: "A snippet of the todo text to find, if the id isn't known." }
+                    }
+                  }
+                },
+                {
+                  name: "removeTodo",
+                  description: "Permanently removes a to-do item, matched by id or a snippet of its text.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING, description: "The todo id. Optional if textMatch is given." },
+                      textMatch: { type: Type.STRING, description: "A snippet of the todo text to find, if the id isn't known." }
+                    }
                   }
                 },
 
@@ -1336,7 +1459,12 @@ async function startServer() {
                   description: "Check whether KAIRA is currently configured to auto-start on Windows login.",
                   parameters: { type: Type.OBJECT, properties: {} }
                 }
-              ]
+              ],
+              // Phase 2: real web search via Gemini's built-in Google Search
+              // grounding, using the same API key — no separate search API
+              // or credentials needed. The model decides on its own when a
+              // query needs live web results vs. its own knowledge.
+              googleSearch: {}
             }
           ]
         },
@@ -1434,6 +1562,101 @@ async function startServer() {
                       }
                     } catch (err: any) {
                       console.error("saveCustomMemory execution failure:", err);
+                    } finally {
+                      clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "end" }));
+                    }
+                  })();
+                } else if (REMINDER_TOOLS.has(fc.name)) {
+                  clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "start" }));
+                  (async () => {
+                    try {
+                      let output: Record<string, unknown>;
+                      if (fc.name === "setReminder") {
+                        const args = fc.args as any;
+                        const list = await loadReminders();
+                        const reminder: Reminder = {
+                          id: Math.random().toString(36).substring(2, 11),
+                          text: args.text,
+                          dueAt: args.dueAtISO,
+                          createdAt: new Date().toISOString(),
+                          fired: false,
+                        };
+                        list.push(reminder);
+                        await saveReminders(list);
+                        scheduleReminder(reminder, (r) => {
+                          (async () => {
+                            const all = await loadReminders();
+                            const updated = all.map((x) => (x.id === r.id ? { ...x, fired: true } : x));
+                            await saveReminders(updated);
+                            broadcastToClients({ type: "reminderFired", reminder: r });
+                          })();
+                        });
+                        output = { result: `Reminder set for ${reminder.dueAt}.`, id: reminder.id };
+                      } else if (fc.name === "listReminders") {
+                        const list = (await loadReminders()).filter((r) => !r.fired);
+                        output = { reminders: list };
+                      } else {
+                        // cancelReminder
+                        const args = fc.args as any;
+                        const list = await loadReminders();
+                        const target = args.id
+                          ? list.find((r) => r.id === args.id)
+                          : list.find((r) => !r.fired && r.text.toLowerCase().includes((args.textMatch || "").toLowerCase()));
+                        if (target) {
+                          cancelScheduledReminder(target.id);
+                          await saveReminders(list.filter((r) => r.id !== target.id));
+                          output = { result: `Cancelled reminder: ${target.text}` };
+                        } else {
+                          output = { result: "No matching reminder found." };
+                        }
+                      }
+                      session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output }, id: fc.id }] });
+                    } catch (err: any) {
+                      console.error(`${fc.name} execution failure:`, err);
+                      session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output: { error: String(err) } }, id: fc.id }] });
+                    } finally {
+                      clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "end" }));
+                    }
+                  })();
+                } else if (TODO_TOOLS.has(fc.name)) {
+                  clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "start" }));
+                  (async () => {
+                    try {
+                      let output: Record<string, unknown>;
+                      const args = fc.args as any;
+                      if (fc.name === "addTodo") {
+                        const list = await loadTodos();
+                        const todo: Todo = {
+                          id: Math.random().toString(36).substring(2, 11),
+                          text: args.text,
+                          done: false,
+                          createdAt: new Date().toISOString(),
+                        };
+                        list.push(todo);
+                        await saveTodos(list);
+                        output = { result: `Added to your list: ${todo.text}`, id: todo.id };
+                      } else if (fc.name === "listTodos") {
+                        output = { todos: await loadTodos() };
+                      } else {
+                        // completeTodo / removeTodo
+                        const list = await loadTodos();
+                        const target = args.id
+                          ? list.find((t) => t.id === args.id)
+                          : list.find((t) => t.text.toLowerCase().includes((args.textMatch || "").toLowerCase()));
+                        if (!target) {
+                          output = { result: "No matching to-do item found." };
+                        } else if (fc.name === "completeTodo") {
+                          await saveTodos(list.map((t) => (t.id === target.id ? { ...t, done: true } : t)));
+                          output = { result: `Marked done: ${target.text}` };
+                        } else {
+                          await saveTodos(list.filter((t) => t.id !== target.id));
+                          output = { result: `Removed: ${target.text}` };
+                        }
+                      }
+                      session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output }, id: fc.id }] });
+                    } catch (err: any) {
+                      console.error(`${fc.name} execution failure:`, err);
+                      session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output: { error: String(err) } }, id: fc.id }] });
                     } finally {
                       clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "end" }));
                     }

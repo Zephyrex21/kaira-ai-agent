@@ -87,6 +87,7 @@ export class KairaAudioSession {
   private onError: (error: string) => void;
   private onMemorySync?: (memories: any[]) => void;
   private onToolStatus?: (name: string, phase: "start" | "end") => void;
+  private onReminderFired?: (reminder: any) => void;
   
   private currentState: LiveState = "disconnected";
   private isActivated = false;
@@ -98,6 +99,7 @@ export class KairaAudioSession {
     onError: (error: string) => void;
     onMemorySync?: (memories: any[]) => void;
     onToolStatus?: (name: string, phase: "start" | "end") => void;
+    onReminderFired?: (reminder: any) => void;
   }) {
     this.onStateChange = handlers.onStateChange;
     this.onTranscription = handlers.onTranscription;
@@ -105,6 +107,7 @@ export class KairaAudioSession {
     this.onError = handlers.onError;
     this.onMemorySync = handlers.onMemorySync;
     this.onToolStatus = handlers.onToolStatus;
+    this.onReminderFired = handlers.onReminderFired;
   }
 
   private setState(state: LiveState) {
@@ -286,6 +289,12 @@ export class KairaAudioSession {
           // never round-trip through the client, e.g. openApplication).
           if (data.type === "toolStatus" && this.onToolStatus) {
             this.onToolStatus(data.name, data.phase);
+          }
+
+          // Phase 2: a scheduled reminder fired (either just now, or it was
+          // missed while nobody was connected and is being surfaced late).
+          if (data.type === "reminderFired" && this.onReminderFired) {
+            this.onReminderFired(data.reminder);
           }
 
           // Handle Tool Calling

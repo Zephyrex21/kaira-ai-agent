@@ -22,6 +22,7 @@ import {
   Square,
   RefreshCw,
   ScrollText,
+  Bell,
   Settings as SettingsIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -275,6 +276,8 @@ export default function App() {
   const [transcriptLog, setTranscriptLog] = useState<TranscriptEntry[]>([]);
   const [showTranscript, setShowTranscript] = useState<boolean>(false);
   const [activeToolStatus, setActiveToolStatus] = useState<string | null>(null);
+  // Phase 2: fired reminders waiting to be shown as toasts
+  const [reminderToasts, setReminderToasts] = useState<{ id: string; text: string }[]>([]);
   // Tracks whether the last transcript entry is still an in-progress model
   // turn, so streamed text chunks append to one bubble instead of spawning
   // a new one per chunk.
@@ -492,6 +495,13 @@ export default function App() {
         // Fire-and-forget pings from server-executed tools (desktop agent,
         // saveCustomMemory) that never round-trip through onToolCall above.
         setActiveToolStatus(phase === "start" ? humanizeToolName(name) : null);
+      },
+      onReminderFired: (reminder) => {
+        setReminderToasts((prev) => [...prev, { id: reminder.id, text: reminder.text }]);
+        // Auto-dismiss after a while so toasts don't pile up forever.
+        setTimeout(() => {
+          setReminderToasts((prev) => prev.filter((t) => t.id !== reminder.id));
+        }, 12000);
       }
     });
 
@@ -839,6 +849,33 @@ export default function App() {
         </AnimatePresence>
 
       </main>
+
+      {/* Phase 2: reminder toast stack */}
+      <div className="fixed top-6 right-6 z-[60] flex flex-col gap-2 items-end pointer-events-none">
+        <AnimatePresence>
+          {reminderToasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 40 }}
+              className="pointer-events-auto flex items-start gap-3 p-3.5 rounded-2xl border border-amber-500/25 bg-amber-950/50 backdrop-blur-xl max-w-xs shadow-[0_0_30px_rgba(0,0,0,0.5)]"
+            >
+              <Bell className="text-amber-400 shrink-0 mt-0.5" size={16} />
+              <div>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-amber-300 font-mono">Reminder</h4>
+                <p className="text-xs text-amber-100 mt-0.5 leading-relaxed">{toast.text}</p>
+              </div>
+              <button
+                onClick={() => setReminderToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+                className="text-amber-400/60 hover:text-amber-300 transition ml-auto shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
       {/* FOOTER INTERFACE WITH WAVEFORM AND CONTROLS */}
       <footer className="relative z-10 w-full max-w-2xl mx-auto flex flex-col items-center gap-5 mt-auto">
