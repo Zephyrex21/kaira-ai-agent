@@ -270,6 +270,13 @@ export function SettingsPanel({ isOpen, onClose, settings, onChange, themeColor 
                     onChange={(v) => onChange({ wakeWordEnabled: v })}
                   />
 
+                  <ToggleRow
+                    label="PUSH TO TALK"
+                    description="Hold the core orb to talk instead of always-on"
+                    checked={settings.pushToTalkEnabled}
+                    onChange={(v) => onChange({ pushToTalkEnabled: v })}
+                  />
+
                   <div className="space-y-1.5">
                     <label className="block text-[10px] font-mono tracking-wider text-slate-300 uppercase">
                       Wake Phrase
@@ -283,6 +290,29 @@ export function SettingsPanel({ isOpen, onClose, settings, onChange, themeColor 
                     />
                     <span className="text-[8px] text-slate-500 uppercase font-mono">
                       Say this phrase to activate Kaira
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-mono tracking-wider text-slate-300 uppercase">
+                      Kaira's Voice
+                    </label>
+                    <select
+                      value={settings.voiceName}
+                      onChange={(e) => onChange({ voiceName: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-sm text-white font-mono focus:outline-none focus:border-cyan-400/50 transition cursor-pointer"
+                    >
+                      <option value="Aoede">Aoede — Breezy</option>
+                      <option value="Puck">Puck — Upbeat</option>
+                      <option value="Charon">Charon — Informative</option>
+                      <option value="Kore">Kore — Firm</option>
+                      <option value="Fenrir">Fenrir — Excitable</option>
+                      <option value="Leda">Leda — Youthful</option>
+                      <option value="Orus">Orus — Firm</option>
+                      <option value="Zephyr">Zephyr — Bright</option>
+                    </select>
+                    <span className="text-[8px] text-slate-500 uppercase font-mono">
+                      Takes effect on the next connection
                     </span>
                   </div>
 

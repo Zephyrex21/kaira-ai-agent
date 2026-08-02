@@ -86,6 +86,7 @@ export class KairaAudioSession {
   private onToolCall: (name: string, args: any, callback: (result: any) => void) => void;
   private onError: (error: string) => void;
   private onMemorySync?: (memories: any[]) => void;
+  private onToolStatus?: (name: string, phase: "start" | "end") => void;
   
   private currentState: LiveState = "disconnected";
   private isActivated = false;
@@ -96,12 +97,14 @@ export class KairaAudioSession {
     onToolCall: (name: string, args: any, callback: (result: any) => void) => void;
     onError: (error: string) => void;
     onMemorySync?: (memories: any[]) => void;
+    onToolStatus?: (name: string, phase: "start" | "end") => void;
   }) {
     this.onStateChange = handlers.onStateChange;
     this.onTranscription = handlers.onTranscription;
     this.onToolCall = handlers.onToolCall;
     this.onError = handlers.onError;
     this.onMemorySync = handlers.onMemorySync;
+    this.onToolStatus = handlers.onToolStatus;
   }
 
   private setState(state: LiveState) {
@@ -277,6 +280,12 @@ export class KairaAudioSession {
             if (this.onMemorySync) {
               this.onMemorySync(data.memories);
             }
+          }
+
+          // Handle fire-and-forget tool status pings (desktop-agent tools that
+          // never round-trip through the client, e.g. openApplication).
+          if (data.type === "toolStatus" && this.onToolStatus) {
+            this.onToolStatus(data.name, data.phase);
           }
 
           // Handle Tool Calling

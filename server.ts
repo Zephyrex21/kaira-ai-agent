@@ -853,12 +853,23 @@ async function startServer() {
       let dialogueHistory: { role: string; text: string }[] = [];
       let currentModelResponseText = "";
       
+      // Voice picker (Phase 1): use the persisted choice, falling back to the
+      // known-safe default if unset or not a supported Live API voice name.
+      const LIVE_API_VOICES = new Set([
+        "Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr",
+      ]);
+      const persistedVoice = loadSettingsFile().voiceName;
+      const selectedVoice =
+        typeof persistedVoice === "string" && LIVE_API_VOICES.has(persistedVoice)
+          ? persistedVoice
+          : "Aoede";
+
       const session = await ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
           },
           systemInstruction: finalInstructions,
           tools: [
@@ -1388,6 +1399,7 @@ async function startServer() {
                 console.log(`[Function Call]: ${fc.name}`, fc.args);
                 
                 if (fc.name === "saveCustomMemory") {
+                  clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "start" }));
                   (async () => {
                     try {
                       const args = fc.args as any;
@@ -1422,33 +1434,40 @@ async function startServer() {
                       }
                     } catch (err: any) {
                       console.error("saveCustomMemory execution failure:", err);
+                    } finally {
+                      clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "end" }));
                     }
                   })();
                 } else if (DESKTOP_TOOLS.has(fc.name)) {
                   // ── Desktop control tools: route to Python agent ──
+                  clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "start" }));
                   (async () => {
                     console.log(`[Desktop Agent] Routing ${fc.name} to Python backend...`);
-                    const agentResult = await callDesktopAgent(fc.name, fc.args as Record<string, unknown>);
+                    try {
+                      const agentResult = await callDesktopAgent(fc.name, fc.args as Record<string, unknown>);
 
-                    if (agentResult.ok) {
-                      const output = agentResult.result ?? { result: "Done." };
-                      session.sendToolResponse({
-                        functionResponses: [{
-                          name: fc.name,
-                          response: { output },
-                          id: fc.id
-                        }]
-                      });
-                    } else {
-                      const errMsg = agentResult.error || "Desktop agent error.";
-                      console.error(`[Desktop Agent] Error for ${fc.name}:`, errMsg);
-                      session.sendToolResponse({
-                        functionResponses: [{
-                          name: fc.name,
-                          response: { output: { result: `Desktop control error: ${errMsg}` } },
-                          id: fc.id
-                        }]
-                      });
+                      if (agentResult.ok) {
+                        const output = agentResult.result ?? { result: "Done." };
+                        session.sendToolResponse({
+                          functionResponses: [{
+                            name: fc.name,
+                            response: { output },
+                            id: fc.id
+                          }]
+                        });
+                      } else {
+                        const errMsg = agentResult.error || "Desktop agent error.";
+                        console.error(`[Desktop Agent] Error for ${fc.name}:`, errMsg);
+                        session.sendToolResponse({
+                          functionResponses: [{
+                            name: fc.name,
+                            response: { output: { result: `Desktop control error: ${errMsg}` } },
+                            id: fc.id
+                          }]
+                        });
+                      }
+                    } finally {
+                      clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "end" }));
                     }
                   })();
                 } else {

@@ -21,14 +21,30 @@ import {
   Pause,
   Square,
   RefreshCw,
+  ScrollText,
   Settings as SettingsIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Memory, MemoryCategory } from "./lib/memoryTypes";
 import { MemoryDashboard } from "./components/MemoryDashboard";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { TranscriptPanel, TranscriptEntry } from "./components/TranscriptPanel";
 import { KairaSettings, DEFAULT_SETTINGS, loadSettings, saveSettings } from "./lib/settingsStore";
 import { KairaWakeWordDetector } from "./lib/wakeWord";
+
+/**
+ * Turns a camelCase tool name (e.g. "openApplication") into a friendly
+ * status label ("Open application...") for the live tool-call indicator.
+ * Deliberately simple (no verb conjugation) since several tool names don't
+ * start with a verb at all (e.g. "brightnessUp", "systemInfo") — this stays
+ * correct for all of them without a maintained lookup table.
+ */
+function humanizeToolName(name: string): string {
+  const spaced = name.replace(/([A-Z])/g, " $1").trim();
+  if (!spaced) return "Working on it...";
+  const label = spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
+  return label + "...";
+}
 
 export default function App() {
   const [state, setState] = useState<LiveState>("disconnected");
@@ -255,6 +271,15 @@ export default function App() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [showMemoryDashboard, setShowMemoryDashboard] = useState<boolean>(false);
 
+  // Phase 1: persistent conversation transcript + live tool-call status pill
+  const [transcriptLog, setTranscriptLog] = useState<TranscriptEntry[]>([]);
+  const [showTranscript, setShowTranscript] = useState<boolean>(false);
+  const [activeToolStatus, setActiveToolStatus] = useState<string | null>(null);
+  // Tracks whether the last transcript entry is still an in-progress model
+  // turn, so streamed text chunks append to one bubble instead of spawning
+  // a new one per chunk.
+  const modelTurnActiveRef = useRef<boolean>(false);
+
   // V2: Settings + wake word state
   const [settings, setSettings] = useState<KairaSettings>(() => loadSettings());
   const [showSettings, setShowSettings] = useState<boolean>(false);
@@ -370,6 +395,11 @@ export default function App() {
           // Auto-clear the other caption when user starts talking
           setModelCaption("");
           setCharacterState("thinking");
+          // A user utterance always arrives as one complete string, and
+          // always starts a fresh turn — close out any in-progress model
+          // bubble and append a new user line to the persistent log.
+          modelTurnActiveRef.current = false;
+          setTranscriptLog((prev) => [...prev, { id: `${Date.now()}-${Math.random()}`, role: "user", text }]);
         } else if (role === "model") {
           setModelCaption((prev) => {
             const next = prev + text;
@@ -379,10 +409,29 @@ export default function App() {
           });
           // Clear user caption when model replies
           setUserCaption("");
+          // Model text streams in chunks — append to the last log bubble
+          // while the same turn is still going, otherwise start a new one.
+          setTranscriptLog((prev) => {
+            if (modelTurnActiveRef.current && prev.length > 0 && prev[prev.length - 1].role === "model") {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                text: updated[updated.length - 1].text + text,
+              };
+              return updated;
+            }
+            modelTurnActiveRef.current = true;
+            return [...prev, { id: `${Date.now()}-${Math.random()}`, role: "model", text }];
+          });
         }
       },
       onToolCall: (name, args, callback) => {
         console.log(`[App] Tool call triggered: ${name}`, args);
+        setActiveToolStatus(humanizeToolName(name));
+        const wrappedCallback = (res: any) => {
+          setActiveToolStatus(null);
+          callback(res);
+        };
         
         const browserTools = [
           "browserOpen",
@@ -412,7 +461,7 @@ export default function App() {
             args,
             id: Math.random().toString(),
             callback: (res) => {
-              callback(res);
+              wrappedCallback(res);
               setBrowserTrigger(null);
             }
           });
@@ -422,12 +471,12 @@ export default function App() {
           
           if (colorName && validColors.includes(colorName)) {
             setThemeColor(colorName);
-            callback({ result: `Successfully shifted aesthetic atmosphere to ${colorName}.` });
+            wrappedCallback({ result: `Successfully shifted aesthetic atmosphere to ${colorName}.` });
           } else {
-            callback({ error: `Unsupported color '${colorName}'. Supported themes are: ${validColors.join(", ")}` });
+            wrappedCallback({ error: `Unsupported color '${colorName}'. Supported themes are: ${validColors.join(", ")}` });
           }
         } else {
-          callback({ error: `Tool ${name} is not implemented.` });
+          wrappedCallback({ error: `Tool ${name} is not implemented.` });
         }
       },
       onError: (err) => {
@@ -438,6 +487,11 @@ export default function App() {
         if (Array.isArray(updatedMemories)) {
           setMemories(updatedMemories);
         }
+      },
+      onToolStatus: (name, phase) => {
+        // Fire-and-forget pings from server-executed tools (desktop agent,
+        // saveCustomMemory) that never round-trip through onToolCall above.
+        setActiveToolStatus(phase === "start" ? humanizeToolName(name) : null);
       }
     });
 
@@ -460,6 +514,24 @@ export default function App() {
   };
   // V2: keep the ref in sync so the wake-word callback calls this exact handler.
   connectHandlerRef.current = handleToggleConnection;
+
+  // Phase 1: push-to-talk — reuses the existing connect()/disconnect() calls
+  // (walkie-talkie style) instead of adding a new mute path inside the audio
+  // pipeline, so the well-tested connect/disconnect flow is the only thing
+  // driving the mic either way.
+  const handlePushToTalkStart = () => {
+    setErrorText(null);
+    if (!sessionRef.current) return;
+    if (state === "disconnected") {
+      void sessionRef.current.connect();
+    }
+  };
+  const handlePushToTalkEnd = () => {
+    if (!sessionRef.current) return;
+    if (state !== "disconnected") {
+      sessionRef.current.disconnect();
+    }
+  };
 
   // Maps theme colors to CSS ambient light spots
   const getAmbientStyles = () => {
@@ -562,6 +634,17 @@ export default function App() {
           >
             <Brain size={14} />
             <span className="hidden sm:inline">RECALLS</span>
+          </button>
+
+          <button 
+            onClick={() => setShowTranscript(!showTranscript)}
+            className={`flex items-center gap-1 transition text-xs font-mono tracking-widest cursor-pointer ${
+              showTranscript ? "text-cyan-400 opacity-100 font-semibold" : "opacity-25 hover:opacity-100 text-white"
+            }`}
+            title="Conversation Transcript"
+          >
+            <ScrollText size={14} />
+            <span className="hidden sm:inline">TRANSCRIPT</span>
           </button>
 
           {/* Real-time screen sharing toggler button inside Kaira glass style header */}
@@ -759,6 +842,24 @@ export default function App() {
 
       {/* FOOTER INTERFACE WITH WAVEFORM AND CONTROLS */}
       <footer className="relative z-10 w-full max-w-2xl mx-auto flex flex-col items-center gap-5 mt-auto">
+
+        {/* Phase 1: live tool-call status pill (e.g. "Opening browser...") */}
+        <AnimatePresence>
+          {activeToolStatus && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-cyan-400/30 bg-cyan-500/10 backdrop-blur-sm"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-200">
+                {activeToolStatus}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         {/* Dynamic Minimalist Waveform Visualizer */}
         <div className="flex items-center justify-center gap-1 h-8 w-44">
@@ -788,8 +889,14 @@ export default function App() {
         {/* Glossy Beautiful Primary Connector Core Node */}
         <div className="flex items-center justify-center relative mb-4">
           <button 
-            onClick={handleToggleConnection}
-            className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 cursor-pointer ${
+            {...(settings.pushToTalkEnabled
+              ? {
+                  onPointerDown: handlePushToTalkStart,
+                  onPointerUp: handlePushToTalkEnd,
+                  onPointerLeave: handlePushToTalkEnd,
+                }
+              : { onClick: handleToggleConnection })}
+            className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 cursor-pointer select-none ${
               state === "disconnected"
                 ? "bg-white/10 hover:bg-white/15 border border-white/15 text-white shadow-[0_0_20px_rgba(255,255,255,0.02)] hover:scale-105 active:scale-95"
                 : state === "listening"
@@ -798,7 +905,11 @@ export default function App() {
                 ? "bg-purple-500/90 hover:bg-purple-600 border border-purple-400/95 text-white shadow-[0_0_35px_rgba(168,85,247,0.4)] scale-105"
                 : "bg-amber-600 border border-amber-300 text-white animate-spin"
             }`}
-            title={state === "disconnected" ? "Awake Kaira" : "Sleep core"}
+            title={
+              settings.pushToTalkEnabled
+                ? "Hold to talk"
+                : state === "disconnected" ? "Awake Kaira" : "Sleep core"
+            }
           >
             {state === "disconnected" ? (
               <Power className="opacity-80" size={24} />
@@ -986,6 +1097,15 @@ export default function App() {
         onClose={() => setShowSettings(false)}
         settings={settings}
         onChange={handleSettingsChange}
+        themeColor={themeColor}
+      />
+
+      {/* Phase 1: Conversation transcript sliding panel */}
+      <TranscriptPanel
+        isOpen={showTranscript}
+        onClose={() => setShowTranscript(false)}
+        entries={transcriptLog}
+        onClear={() => setTranscriptLog([])}
         themeColor={themeColor}
       />
     </div>

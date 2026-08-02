@@ -23,6 +23,10 @@ export interface KairaSettings {
   sensitivity: number;
   /** Master toggle for UI animations. */
   animations: boolean;
+  /** Gemini Live prebuilt voice name (e.g. "Aoede", "Puck", "Charon"). */
+  voiceName: string;
+  /** When true, the mic only transmits while the orb button is held down. */
+  pushToTalkEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: KairaSettings = {
@@ -32,6 +36,8 @@ export const DEFAULT_SETTINGS: KairaSettings = {
   micDeviceId: "",
   sensitivity: 60,
   animations: true,
+  voiceName: "Aoede",
+  pushToTalkEnabled: false,
 };
 
 const STORAGE_KEY = "kaira.settings.v2";
