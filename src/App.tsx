@@ -595,6 +595,30 @@ export default function App() {
     }
   };
 
+  // Theme-aware chip styling for the header nav buttons — previously these
+  // sat at opacity-25 by default (nearly invisible, and permanently so on
+  // touch devices with no hover) and hardcoded cyan for their active state
+  // regardless of the selected theme. This makes both properly visible and
+  // theme-consistent.
+  const getNavActiveClasses = () => {
+    switch (themeColor) {
+      case "violet": return "text-purple-300 bg-purple-500/15 border-purple-400/30";
+      case "crimson": return "text-rose-300 bg-rose-500/15 border-rose-400/30";
+      case "emerald": return "text-emerald-300 bg-emerald-500/15 border-emerald-400/30";
+      case "celestial": return "text-sky-300 bg-sky-500/15 border-sky-400/30";
+      case "gold": return "text-amber-300 bg-amber-500/15 border-amber-400/30";
+      case "rose": return "text-pink-300 bg-pink-500/15 border-pink-400/30";
+      case "charcoal":
+      default:
+        return "text-cyan-300 bg-cyan-500/15 border-cyan-400/30";
+    }
+  };
+  const NAV_INACTIVE_CLASSES = "text-slate-400 border-transparent hover:text-white hover:bg-white/5";
+  const navButtonClass = (isActive: boolean) =>
+    `flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition text-xs font-mono tracking-widest cursor-pointer shrink-0 ${
+      isActive ? `${getNavActiveClasses()} font-semibold` : NAV_INACTIVE_CLASSES
+    }`;
+
   const getOrbRingColor = () => {
     switch (state) {
       case "listening": return "border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.3)] bg-indigo-500/10";
@@ -643,11 +667,10 @@ export default function App() {
           }`} />
         </div>
 
-        <div className="flex items-center gap-5">
-          {/* Faint utilities hidden in margin */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <button
             onClick={() => setShowGuide(!showGuide)}
-            className="flex items-center gap-1 opacity-25 hover:opacity-100 text-white transition text-xs font-mono tracking-widest cursor-pointer"
+            className={navButtonClass(showGuide)}
             title="Sway Themes and Info"
           >
             <Compass size={14} />
@@ -656,7 +679,7 @@ export default function App() {
           
           <button 
             onClick={() => setShowMemoryDashboard(!showMemoryDashboard)}
-            className="flex items-center gap-1 opacity-25 hover:opacity-100 text-white transition text-xs font-mono tracking-widest cursor-pointer"
+            className={navButtonClass(showMemoryDashboard)}
             title="Recollections Database"
           >
             <Brain size={14} />
@@ -665,9 +688,7 @@ export default function App() {
 
           <button 
             onClick={() => setShowTranscript(!showTranscript)}
-            className={`flex items-center gap-1 transition text-xs font-mono tracking-widest cursor-pointer ${
-              showTranscript ? "text-cyan-400 opacity-100 font-semibold" : "opacity-25 hover:opacity-100 text-white"
-            }`}
+            className={navButtonClass(showTranscript)}
             title="Conversation Transcript"
           >
             <ScrollText size={14} />
@@ -677,29 +698,21 @@ export default function App() {
           {/* Real-time screen sharing toggler button inside Kaira glass style header */}
           <button 
             onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
-            className={`flex items-center gap-1.5 transition text-xs font-mono tracking-widest cursor-pointer ${
-              isScreenSharing 
-                ? "text-cyan-400 opacity-100 font-semibold" 
-                : "opacity-25 hover:opacity-100 text-white"
-            }`}
+            className={navButtonClass(isScreenSharing)}
             title="Share Screen with Kaira"
           >
-            <Monitor size={14} className={isScreenSharing && !isScreenSharingPaused ? "animate-pulse text-cyan-400" : ""} />
-            <span>{isScreenSharing ? "SHARING" : "SHARE SCREEN"}</span>
+            <Monitor size={14} className={isScreenSharing && !isScreenSharingPaused ? "animate-pulse" : ""} />
+            <span className="hidden sm:inline">{isScreenSharing ? "SHARING" : "SHARE SCREEN"}</span>
           </button>
 
           {/* V2: Settings toggler button — matches existing faint-to-hover header style */}
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className={`flex items-center gap-1.5 transition text-xs font-mono tracking-widest cursor-pointer ${
-              showSettings
-                ? "text-cyan-400 opacity-100 font-semibold"
-                : "opacity-25 hover:opacity-100 text-white"
-            }`}
+            className={navButtonClass(showSettings)}
             title="Kaira Configuration"
           >
             <SettingsIcon size={14} className={showSettings ? "animate-spin [animation-duration:6s]" : ""} />
-            <span>SETTINGS</span>
+            <span className="hidden sm:inline">SETTINGS</span>
           </button>
         </div>
       </header>
@@ -813,7 +826,7 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-3 text-white">
                 <div className="flex items-center gap-1.5 font-display text-sm font-bold tracking-wide">
-                  <Compass size={16} className="text-indigo-400" />
+                  <Compass size={16} className={getNavActiveClasses().split(" ")[0]} />
                   <span>PLAYFUL CORE SUGGESTIONS</span>
                 </div>
                 <button 
@@ -826,15 +839,15 @@ export default function App() {
               <p className="text-xs text-slate-400 mb-4 font-mono leading-relaxed">
                 Kaira is equipped with dynamic visual modules and standard text browser projectors. Here are clever triggers to try speaking aloud:
               </p>
-              <div className="space-y-2 text-xs font-serif italic text-indigo-300">
+              <div className={`space-y-2 text-xs font-serif italic ${getNavActiveClasses().split(" ")[0]}`}>
                 <div className="p-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition cursor-pointer font-sans normal-case text-slate-200">
-                  ⚡ &quot;Kaira, change atmosphere of your core to crimson&quot; <span className="text-[10px] font-mono text-indigo-400 block mt-0.5 font-medium">Shifts theme color background</span>
+                  ⚡ &quot;Kaira, change atmosphere of your core to crimson&quot; <span className={`text-[10px] font-mono block mt-0.5 font-medium ${getNavActiveClasses().split(" ")[0]}`}>Shifts theme color background</span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition cursor-pointer font-sans normal-case text-slate-200">
-                  ⚡ &quot;Open youtube.com on my screen please&quot; <span className="text-[10px] font-mono text-indigo-400 block mt-0.5 font-medium">Invokes browser projector panel</span>
+                  ⚡ &quot;Open youtube.com on my screen please&quot; <span className={`text-[10px] font-mono block mt-0.5 font-medium ${getNavActiveClasses().split(" ")[0]}`}>Invokes browser projector panel</span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition cursor-pointer font-sans normal-case text-slate-200">
-                  ⚡ &quot;Tell me a witty joke and change background to gold&quot; <span className="text-[10px] font-mono text-indigo-400 block mt-0.5 font-medium">Combines tools & voice</span>
+                  ⚡ &quot;Tell me a witty joke and change background to gold&quot; <span className={`text-[10px] font-mono block mt-0.5 font-medium ${getNavActiveClasses().split(" ")[0]}`}>Combines tools & voice</span>
                 </div>
               </div>
             </motion.div>
