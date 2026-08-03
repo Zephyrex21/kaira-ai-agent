@@ -373,6 +373,23 @@ export default function App() {
     }
   };
 
+  // Phase 3: edit an existing memory's category/text in place.
+  const handleEditMemory = async (id: string, category: MemoryCategory, text: string) => {
+    try {
+      const resp = await fetch(`/api/memories/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, text })
+      });
+      const updated = await resp.json();
+      if (updated && updated.id) {
+        setMemories((prev) => prev.map((m) => (m.id === id ? updated : m)));
+      }
+    } catch (err) {
+      console.error("Manual memory edit execution failed:", err);
+    }
+  };
+
   // Initialize the audio session handlers once on mount
   useEffect(() => {
     sessionRef.current = new KairaAudioSession({
@@ -1125,6 +1142,7 @@ export default function App() {
         memories={memories}
         onAddMemory={handleAddManualMemory}
         onDeleteMemory={handleDeleteMemory}
+        onEditMemory={handleEditMemory}
         themeColor={themeColor}
       />
 

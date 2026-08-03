@@ -12,7 +12,9 @@ import {
   Users, 
   Flame, 
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Pencil,
+  Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -22,6 +24,7 @@ interface MemoryDashboardProps {
   memories: Memory[];
   onAddMemory: (category: MemoryCategory, text: string) => Promise<void>;
   onDeleteMemory: (id: string) => Promise<void>;
+  onEditMemory: (id: string, category: MemoryCategory, text: string) => Promise<void>;
   themeColor: string;
 }
 
@@ -31,6 +34,7 @@ export function MemoryDashboard({
   memories,
   onAddMemory,
   onDeleteMemory,
+  onEditMemory,
   themeColor
 }: MemoryDashboardProps) {
   const [activeTab, setActiveTab] = useState<MemoryCategory | "all">("all");
@@ -38,6 +42,10 @@ export function MemoryDashboard({
   const [newCategory, setNewCategory] = useState<MemoryCategory>("identity");
   const [isAdding, setIsAdding] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraftText, setEditDraftText] = useState("");
+  const [editDraftCategory, setEditDraftCategory] = useState<MemoryCategory>("identity");
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   // Category Configuration
   const categoryConfig: Record<MemoryCategory, { label: string; icon: any; color: string; bg: string }> = {
@@ -125,6 +133,30 @@ export function MemoryDashboard({
       return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
     } catch (e) {
       return "Durable Record";
+    }
+  };
+
+  const startEditing = (m: Memory) => {
+    setEditingId(m.id);
+    setEditDraftText(m.text);
+    setEditDraftCategory(m.category);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditDraftText("");
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    if (!editDraftText.trim()) return;
+    setEditSubmitting(true);
+    try {
+      await onEditMemory(id, editDraftCategory, editDraftText.trim());
+      setEditingId(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -323,31 +355,88 @@ export function MemoryDashboard({
                         exit={{ opacity: 0, scale: 0.95 }}
                         className={`flex items-start justify-between gap-4 p-4 rounded-xl border border-white/5 backdrop-blur-md bg-white/[0.02] ${cfg.bg} transition-colors group relative`}
                       >
-                        <div className="flex gap-3.5 overflow-hidden">
-                          <div className={`p-2 rounded-lg border mt-0.5 shrink-0 bg-black/40 ${cfg.color}`}>
-                            <Icon size={14} />
+                        {editingId === m.id ? (
+                          <div className="w-full space-y-3">
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                              {(Object.keys(categoryConfig) as MemoryCategory[]).map((cat) => {
+                                const CatIcon = categoryConfig[cat].icon;
+                                const active = editDraftCategory === cat;
+                                return (
+                                  <button
+                                    key={cat}
+                                    type="button"
+                                    onClick={() => setEditDraftCategory(cat)}
+                                    className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[10px] tracking-wide transition cursor-pointer ${
+                                      active
+                                        ? "border-cyan-400 bg-cyan-400/10 text-cyan-300"
+                                        : "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10"
+                                    }`}
+                                  >
+                                    <CatIcon size={11} />
+                                    <span className="truncate">{categoryConfig[cat].label.split(" ")[0]}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <textarea
+                              value={editDraftText}
+                              onChange={(e) => setEditDraftText(e.target.value)}
+                              className="w-full h-16 text-xs p-3 rounded-lg border border-white/10 bg-black/40 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 resize-none font-sans"
+                            />
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={cancelEditing}
+                                className="px-3 py-1.5 rounded-lg border border-white/5 text-[11px] font-mono tracking-wide text-slate-400 hover:text-white transition cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => handleSaveEdit(m.id)}
+                                disabled={editSubmitting}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] uppercase font-mono tracking-widest transition disabled:opacity-50 cursor-pointer"
+                              >
+                                <Check size={12} /> {editSubmitting ? "Saving..." : "Save"}
+                              </button>
+                            </div>
                           </div>
-                          <div className="overflow-hidden">
-                            <span className={`text-[9px] font-mono uppercase tracking-wider block ${cfg.color}`}>
-                              {cfg.label}
-                            </span>
-                            <p className="text-xs text-slate-200 mt-1 font-sans leading-relaxed break-words font-medium">
-                              {m.text}
-                            </p>
-                            <span className="text-[9px] font-mono text-slate-500 mt-2 block">
-                              Recalled: {formatDate(m.createdAt)}
-                            </span>
-                          </div>
-                        </div>
+                        ) : (
+                          <>
+                            <div className="flex gap-3.5 overflow-hidden">
+                              <div className={`p-2 rounded-lg border mt-0.5 shrink-0 bg-black/40 ${cfg.color}`}>
+                                <Icon size={14} />
+                              </div>
+                              <div className="overflow-hidden">
+                                <span className={`text-[9px] font-mono uppercase tracking-wider block ${cfg.color}`}>
+                                  {cfg.label}
+                                </span>
+                                <p className="text-xs text-slate-200 mt-1 font-sans leading-relaxed break-words font-medium">
+                                  {m.text}
+                                </p>
+                                <span className="text-[9px] font-mono text-slate-500 mt-2 block">
+                                  Recalled: {formatDate(m.createdAt)}
+                                </span>
+                              </div>
+                            </div>
 
-                        {/* Forget / Delete trigger button */}
-                        <button
-                          onClick={() => onDeleteMemory(m.id)}
-                          className="opacity-0 group-hover:opacity-100 p-2 rounded-lg border border-red-500/25 bg-red-950/15 text-red-400 hover:bg-red-500 hover:text-white transition duration-150 absolute top-4 right-4 sm:relative sm:top-0 sm:right-0 shrink-0 cursor-pointer"
-                          title="Forget this memory"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                            {/* Edit / Forget trigger buttons */}
+                            <div className="opacity-0 group-hover:opacity-100 flex gap-1.5 transition duration-150 absolute top-4 right-4 sm:relative sm:top-0 sm:right-0 shrink-0">
+                              <button
+                                onClick={() => startEditing(m)}
+                                className="p-2 rounded-lg border border-cyan-500/25 bg-cyan-950/15 text-cyan-400 hover:bg-cyan-500 hover:text-slate-950 transition cursor-pointer"
+                                title="Edit this memory"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => onDeleteMemory(m.id)}
+                                className="p-2 rounded-lg border border-red-500/25 bg-red-950/15 text-red-400 hover:bg-red-500 hover:text-white transition cursor-pointer"
+                                title="Forget this memory"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </motion.div>
                     );
                   })

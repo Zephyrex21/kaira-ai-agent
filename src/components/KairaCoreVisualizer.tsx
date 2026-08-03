@@ -51,6 +51,40 @@ export const KairaCoreVisualizer: React.FC<KairaCoreVisualizerProps> = ({
   // Physics & Animation states
   const speechVolumeRef = useRef<number>(0);
 
+  // Phase 3: track the latest emotion in a ref (not a render-loop dependency)
+  // so mood changes affect the animation each frame without restarting the
+  // whole particle system — regenerating particles on every emotion change
+  // (which happens roughly per sentence) would look janky.
+  const activeEmotionRef = useRef<KairaEmotion>(activeEmotion);
+  useEffect(() => {
+    activeEmotionRef.current = activeEmotion;
+  }, [activeEmotion]);
+
+  /** How energetic the ambient animation should feel for a given mood. */
+  const getEmotionEnergy = (emotion: KairaEmotion): number => {
+    switch (emotion) {
+      case "excited":
+      case "surprised":
+        return 1.6;
+      case "happy":
+      case "playful":
+        return 1.3;
+      case "curious":
+      case "proud":
+        return 1.1;
+      case "confused":
+        return 0.9;
+      case "sad":
+      case "embarrassed":
+        return 0.6;
+      case "thinking":
+        return 0.85;
+      case "idle":
+      default:
+        return 1.0;
+    }
+  };
+
   // Floating sci-fi background particle arrays
   const particlesRef = useRef<Array<{
     x: number;
@@ -170,6 +204,7 @@ export const KairaCoreVisualizer: React.FC<KairaCoreVisualizerProps> = ({
 
       const systemTime = performance.now();
       const colors = getGlowColors();
+      const emotionEnergy = getEmotionEnergy(activeEmotionRef.current);
 
       // Dynamic Audio analysis fetching from real voice session
       let audioLevel = 0;
@@ -217,9 +252,9 @@ export const KairaCoreVisualizer: React.FC<KairaCoreVisualizerProps> = ({
       // Volumetric light beams shooting up from projector base
       const conicalBeamGrad = ctx.createLinearGradient(centerX, height * 0.25, centerX, height);
       conicalBeamGrad.addColorStop(0, "rgba(0,0,0,0)");
-      conicalBeamGrad.addColorStop(0.4, colors.primary.replace("1)", "0.03)"));
-      conicalBeamGrad.addColorStop(0.75, colors.primary.replace("1)", "0.08)"));
-      conicalBeamGrad.addColorStop(1, colors.secondary.replace("0.8)", "0.18)"));
+      conicalBeamGrad.addColorStop(0.4, colors.primary.replace("1)", `${0.03 * emotionEnergy})`));
+      conicalBeamGrad.addColorStop(0.75, colors.primary.replace("1)", `${0.08 * emotionEnergy})`));
+      conicalBeamGrad.addColorStop(1, colors.secondary.replace("0.8)", `${0.18 * emotionEnergy})`));
 
       ctx.fillStyle = conicalBeamGrad;
       ctx.beginPath();
@@ -246,7 +281,7 @@ export const KairaCoreVisualizer: React.FC<KairaCoreVisualizerProps> = ({
       // 3. UPDATE AND DRAW HOLOGRAM NEURAL PARTICLES RISING (Cinematic Stardust)
       // ==========================================
       particlesRef.current.forEach((p) => {
-        const riseSpeed = p.speed * (1 + speechVolumeRef.current * 1.8);
+        const riseSpeed = p.speed * emotionEnergy * (1 + speechVolumeRef.current * 1.8);
         p.y -= riseSpeed;
         
         // Horizontal drift sway
@@ -282,7 +317,7 @@ export const KairaCoreVisualizer: React.FC<KairaCoreVisualizerProps> = ({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [session, state, themeColor, activeEmotion, characterState]);
+  }, [session, state, themeColor, characterState]);
 
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden">

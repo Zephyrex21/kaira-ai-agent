@@ -23,6 +23,8 @@ import {
 import { Reminder } from "./src/lib/reminderTypes";
 import { loadTodos, saveTodos } from "./server_todos";
 import { Todo } from "./src/lib/todoTypes";
+import { loadJournal, saveJournal, todayKey } from "./server_journal";
+import { JournalEntry } from "./src/lib/journalTypes";
 import {
   DATA_DIR,
   dataFile,
@@ -99,6 +101,9 @@ const REMINDER_TOOLS: ReadonlySet<string> = new Set(["setReminder", "listReminde
 
 /** Phase 2: to-do list, handled server-side (not routed to the Python agent). */
 const TODO_TOOLS: ReadonlySet<string> = new Set(["addTodo", "listTodos", "completeTodo", "removeTodo"]);
+
+/** Phase 3: daily check-in journal, handled server-side. */
+const JOURNAL_TOOLS: ReadonlySet<string> = new Set(["getTodaysJournalStatus", "addJournalEntry", "listRecentJournalEntries"]);
 
 /**
  * Call the Python desktop agent.  Returns the parsed JSON response.
@@ -302,6 +307,29 @@ async function startServer() {
       memories = memories.filter(m => m.id !== id);
       await saveMemories(memories);
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Phase 3: edit an existing memory's category/text in place.
+  app.patch("/api/memories/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { category, text } = req.body;
+      const memories = await loadMemories();
+      const idx = memories.findIndex(m => m.id === id);
+      if (idx === -1) {
+        return res.status(404).json({ error: "Memory not found." });
+      }
+      memories[idx] = {
+        ...memories[idx],
+        ...(category ? { category } : {}),
+        ...(text ? { text } : {}),
+        updatedAt: new Date().toISOString(),
+      };
+      await saveMemories(memories);
+      res.json(memories[idx]);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -899,7 +927,8 @@ async function startServer() {
         "   - AUTO-START: Use 'enableAutoStart' when the user wants KAIRA to start with Windows, 'disableAutoStart' to remove it, 'getAutoStartStatus' to check. Explain what you're doing.\n" +
         "   - SETTINGS: The user can also configure these in the SETTINGS panel in the UI. If they mention settings, let them know they can adjust them there too.\n" +
         "12. YOUR CREATOR: You were built and designed by Saurabh Raj Shekhar — a Computer Science (Data Science) student and developer (GitHub: github.com/Zephyrex21). If TECH or anyone else asks who made you, who built you, who created you, or who your developer/owner is, answer warmly and proudly that Saurabh Raj Shekhar created and built you.\n" +
-        "13. LIVE WEB SEARCH: You have real-time Google Search access built in. Use it naturally whenever a question needs current information — news, prices, scores, weather, facts past your training, anything time-sensitive. You don't need to announce that you're searching; just answer with the up-to-date result.";
+        "13. LIVE WEB SEARCH: You have real-time Google Search access built in. Use it naturally whenever a question needs current information — news, prices, scores, weather, facts past your training, anything time-sensitive. You don't need to announce that you're searching; just answer with the up-to-date result.\n" +
+        "14. DAILY CHECK-IN: Near the start of a conversation, quietly call getTodaysJournalStatus once. If TECH hasn't checked in yet today and the mood feels right, naturally work in a warm 'how's your day going?' at some point — don't force it or lead with it if they're clearly focused on something else. If they share something, call addJournalEntry with a brief summary. This is a light touch, not an interrogation — one gentle ask per day, never repeat it if they brush it off.";
 
       const finalInstructions = formatSystemInstructionsWithMemories(baseInstructions, memories) +
         `\n\n=== CURRENT DATE & TIME ===\nRight now it is ${new Date().toString()}. Use this as your reference point whenever you compute a reminder or timer due-time from a relative phrase like "in 10 minutes" or "tomorrow at 9am".\n===========================\n`;
@@ -1158,6 +1187,27 @@ async function startServer() {
                       textMatch: { type: Type.STRING, description: "A snippet of the todo text to find, if the id isn't known." }
                     }
                   }
+                },
+
+                // ======== PHASE 3: DAILY CHECK-IN / JOURNAL ========
+                {
+                  name: "getTodaysJournalStatus",
+                  description: "Check once, near the start of a conversation, whether TECH has already done a journal check-in today. If not, gently and naturally ask how their day is going sometime in the conversation, then call addJournalEntry with a short summary of what they shared. Don't force it if the mood isn't right.",
+                  parameters: { type: Type.OBJECT, properties: {} }
+                },
+                {
+                  name: "addJournalEntry",
+                  description: "Logs a short daily check-in reflection for today, based on what TECH shared about their day/mood.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: { text: { type: Type.STRING, description: "A brief third-person summary of how their day/mood was." } },
+                    required: ["text"]
+                  }
+                },
+                {
+                  name: "listRecentJournalEntries",
+                  description: "Lists the last several days of journal check-in entries, e.g. if TECH asks how they've been feeling lately.",
+                  parameters: { type: Type.OBJECT, properties: {} }
                 },
 
                 // ======== DESKTOP CONTROL TOOLS (routed to Python agent) ========
@@ -1652,6 +1702,41 @@ async function startServer() {
                           await saveTodos(list.filter((t) => t.id !== target.id));
                           output = { result: `Removed: ${target.text}` };
                         }
+                      }
+                      session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output }, id: fc.id }] });
+                    } catch (err: any) {
+                      console.error(`${fc.name} execution failure:`, err);
+                      session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output: { error: String(err) } }, id: fc.id }] });
+                    } finally {
+                      clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "end" }));
+                    }
+                  })();
+                } else if (JOURNAL_TOOLS.has(fc.name)) {
+                  clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "start" }));
+                  (async () => {
+                    try {
+                      let output: Record<string, unknown>;
+                      const today = todayKey();
+                      if (fc.name === "getTodaysJournalStatus") {
+                        const entries = await loadJournal();
+                        const hasToday = entries.some((e) => e.date === today);
+                        output = { alreadyCheckedInToday: hasToday };
+                      } else if (fc.name === "addJournalEntry") {
+                        const args = fc.args as any;
+                        const entries = await loadJournal();
+                        const entry: JournalEntry = {
+                          id: Math.random().toString(36).substring(2, 11),
+                          date: today,
+                          text: args.text,
+                          createdAt: new Date().toISOString(),
+                        };
+                        entries.push(entry);
+                        await saveJournal(entries);
+                        output = { result: "Check-in logged." };
+                      } else {
+                        // listRecentJournalEntries
+                        const entries = await loadJournal();
+                        output = { entries: entries.slice(-14) };
                       }
                       session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output }, id: fc.id }] });
                     } catch (err: any) {
