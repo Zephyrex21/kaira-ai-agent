@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Memory, MemoryTransaction } from "./src/lib/memoryTypes";
 import { dataFile } from "./server_paths";
+import { recordMemoryUsage } from "./server_usage";
 
 const MEMORY_FILE = dataFile("memories.json");
 
@@ -177,6 +178,13 @@ ${dialogueContext}
     const resultText = response.text?.trim() || "{}";
     const resultObj = JSON.parse(resultText);
     const transactions: MemoryTransaction[] = resultObj.transactions || [];
+
+    if (response.usageMetadata) {
+      const u = response.usageMetadata;
+      recordMemoryUsage(u.promptTokenCount || 0, u.candidatesTokenCount || 0).catch((e) =>
+        console.error("[Usage] Failed to record memory usage:", e)
+      );
+    }
 
     if (transactions.length === 0) {
       console.log("[Memory] Zero transactions generated. Ignored routine conversations.");

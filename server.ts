@@ -33,6 +33,7 @@ import {
   listUpcomingEvents,
   createCalendarEvent,
 } from "./server_calendar";
+import { recordSessionStart, recordLiveUsage, getUsageSummary } from "./server_usage";
 import {
   DATA_DIR,
   dataFile,
@@ -440,6 +441,15 @@ async function startServer() {
     } catch (e: any) {
       logError(`APIKEY_SAVE_ERROR: ${e?.message || e}`);
       res.status(500).json({ error: e?.message || "Failed to save API key." });
+    }
+  });
+
+  // Phase 6: API usage / estimated cost tracking.
+  app.get("/api/usage", async (_req, res) => {
+    try {
+      res.json(await getUsageSummary());
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -1602,6 +1612,14 @@ async function startServer() {
         },
         callbacks: {
           onmessage: (message: LiveServerMessage) => {
+            // Phase 6: cost tracking — capture token usage as it streams in.
+            if (message.usageMetadata) {
+              const u = message.usageMetadata;
+              recordLiveUsage(u.promptTokenCount || 0, u.responseTokenCount || 0).catch((e) =>
+                console.error("[Usage] Failed to record live usage:", e)
+              );
+            }
+
             // Audio Stream Chunk (model response audio play, 24kHz raw PCM)
             const audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (audio) {
@@ -1903,6 +1921,7 @@ async function startServer() {
       });
       
       clientWs.send(JSON.stringify({ type: "status", status: "connected" }));
+      recordSessionStart().catch((e) => console.error("[Usage] Failed to record session start:", e));
       
       clientWs.on("message", (rawMsg) => {
         try {

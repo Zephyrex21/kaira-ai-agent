@@ -1,26 +1,28 @@
 /* ===========================================================================
- * KAIRA — Electron main process (Phase 1)
+ * KAIRA — Electron main process (Phase 1 + Phase 6)
  * ---------------------------------------------------------------------------
- * Responsibilities in this phase:
+ * Responsibilities:
  *   1. Enforce a single running instance.
  *   2. Launch the existing Node backend (server.ts, bundled to dist/server.cjs)
  *      silently as a child process — no console window, no browser tab.
  *   3. Show a splash window while the backend boots, then load the real UI
  *      (http://localhost:3000) into the main application window.
  *   4. Clean up the backend (and its child Python agent) on quit.
+ *   5. (Phase 6) System tray with close-to-tray, and GitHub-Releases-based
+ *      auto-update via electron-updater.
  *
- * Tray, window-state persistence, close-to-tray and notifications arrive in
- * Phase 2; installer/auto-update/PyInstaller in later phases. The backend and
- * AI logic are reused verbatim — nothing here reimplements chat/memory/voice.
+ * The backend and AI logic are reused verbatim — nothing here reimplements
+ * chat/memory/voice.
  * ========================================================================= */
 
 'use strict';
 
-const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, Tray, shell, dialog, nativeImage } = require('electron');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 
 // --- Constants -------------------------------------------------------------
 const SERVER_PORT = 3000;
@@ -34,6 +36,8 @@ const APP_ROOT = app.isPackaged
   : path.join(__dirname, '..');
 
 const SERVER_ENTRY = path.join(APP_ROOT, 'dist', 'server.cjs');
+const TRAY_ICON_PATH = path.join(APP_ROOT, 'assets', 'icons', 'tray.png');
+const APP_ICON_PATH = path.join(APP_ROOT, 'assets', 'icons', 'icon.png');
 
 /** @type {import('child_process').ChildProcess | null} */
 let serverProcess = null;
@@ -41,6 +45,8 @@ let serverProcess = null;
 let mainWindow = null;
 /** @type {BrowserWindow | null} */
 let splashWindow = null;
+/** @type {Tray | null} */
+let tray = null;
 let isQuitting = false;
 
 // ---------------------------------------------------------------------------
@@ -185,6 +191,7 @@ function createMainWindow() {
     backgroundColor: '#0a0a0f',
     autoHideMenuBar: true,
     title: 'KAIRA',
+    icon: fs.existsSync(APP_ICON_PATH) ? APP_ICON_PATH : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -211,9 +218,105 @@ function createMainWindow() {
     mainWindow?.focus();
   });
 
+  // Phase 6: close-to-tray — the X button hides the window instead of
+  // quitting, so KAIRA (and its wake-word listener) keeps running in the
+  // background. Only an actual Quit from the tray menu really exits.
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+
   mainWindow.on('closed', () => (mainWindow = null));
 
   mainWindow.loadURL(SERVER_ORIGIN);
+}
+
+// ---------------------------------------------------------------------------
+// System tray
+// ---------------------------------------------------------------------------
+function createTray() {
+  if (!fs.existsSync(TRAY_ICON_PATH)) return; // no icon yet — skip gracefully
+  const icon = nativeImage.createFromPath(TRAY_ICON_PATH);
+  tray = new Tray(icon);
+  tray.setToolTip('KAIRA');
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Show KAIRA',
+      click: () => {
+        if (!mainWindow) {
+          createMainWindow();
+        } else {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Check for Updates…',
+      click: () => checkForUpdates(true),
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit KAIRA',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+  tray.setContextMenu(menu);
+
+  // Left-click toggles the window, matching common tray-app behavior.
+  tray.on('click', () => {
+    if (!mainWindow) return createMainWindow();
+    mainWindow.isVisible() ? mainWindow.hide() : (mainWindow.show(), mainWindow.focus());
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Auto-update (GitHub Releases via electron-updater)
+// ---------------------------------------------------------------------------
+function checkForUpdates(manual) {
+  if (!app.isPackaged) {
+    if (manual) dialog.showMessageBox({ message: 'Auto-update only runs in packaged builds, not in dev mode.' });
+    return; // avoids noisy update checks while developing
+  }
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('[Updater] Check failed:', err);
+    if (manual) dialog.showErrorBox('Update check failed', String(err));
+  });
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.on('update-available', (info) => {
+    console.log('[Updater] Update available:', info.version);
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    dialog
+      .showMessageBox({
+        type: 'info',
+        buttons: ['Restart now', 'Later'],
+        title: 'KAIRA update ready',
+        message: `Version ${info.version} has been downloaded.`,
+        detail: 'Restart to apply it now, or it will install next time you quit.',
+      })
+      .then(({ response }) => {
+        if (response === 0) {
+          isQuitting = true;
+          autoUpdater.quitAndInstall();
+        }
+      });
+  });
+  autoUpdater.on('error', (err) => console.error('[Updater] Error:', err));
+
+  // One check shortly after boot, then every few hours while running.
+  setTimeout(() => checkForUpdates(false), 10_000);
+  setInterval(() => checkForUpdates(false), 4 * 60 * 60 * 1000);
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +330,8 @@ async function bootstrap() {
     startBackend();
     await waitForBackend(SERVER_READY_TIMEOUT_MS);
     createMainWindow();
+    createTray();
+    setupAutoUpdater();
   } catch (err) {
     if (splashWindow) splashWindow.close();
     dialog.showErrorBox(
@@ -245,9 +350,13 @@ app.on('activate', () => {
 });
 
 app.on('window-all-closed', () => {
-  // Phase 2 introduces close-to-tray; for now quitting when all windows close
-  // is the expected behaviour on Windows.
-  if (process.platform !== 'darwin') app.quit();
+  // Phase 6: close-to-tray keeps KAIRA (and its wake-word listener) running
+  // in the background via the tray icon — the X button hides rather than
+  // closes the window (see the 'close' handler in createMainWindow), so this
+  // normally only fires if a window is destroyed some other way. Quit for
+  // real only through the tray's "Quit KAIRA" item.
+  if (process.platform === 'darwin' || tray) return;
+  app.quit();
 });
 
 app.on('before-quit', () => {

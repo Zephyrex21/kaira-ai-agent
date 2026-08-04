@@ -25,12 +25,21 @@ extraResources:
     filter: ["**/*"]
 
 win:
+  icon: assets/icons/icon.ico
   target:
     - target: nsis
       arch: [x64]
     - target: portable
       arch: [x64]
   artifactName: ${productName}-${version}-${arch}.${ext}
+
+# Phase 6: auto-update checks GitHub Releases on this repo. Publishing a new
+# release (with the built artifacts attached) is what makes an update
+# available — electron-updater does not build/publish anything itself.
+publish:
+  provider: github
+  owner: Zephyrex21
+  repo: kaira-ai-agent
 
 nsis:
   oneClick: false

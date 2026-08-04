@@ -99,6 +99,23 @@ export function SettingsPanel({ isOpen, onClose, settings, onChange, themeColor 
     })();
   }, [isOpen]);
 
+  // Phase 6: API usage / estimated cost.
+  const [usage, setUsage] = useState<{
+    sessionCount: number;
+    liveInputTokens: number;
+    liveOutputTokens: number;
+    memoryInputTokens: number;
+    memoryOutputTokens: number;
+    estimatedCostUSD: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch("/api/usage", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setUsage)
+      .catch(() => {});
+  }, [isOpen]);
+
   // Enumerate microphones (mirrors how audio.ts grabs getUserMedia).
   useEffect(() => {
     if (!isOpen) return;
@@ -469,6 +486,25 @@ export function SettingsPanel({ isOpen, onClose, settings, onChange, themeColor 
                         Connect
                       </a>
                     )}
+                  </div>
+
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 pt-2">
+                    API Usage
+                  </div>
+                  <div className="p-4 rounded-xl border border-white/10 bg-white/5 space-y-2">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Estimated cost</span>
+                      <span className="text-lg font-mono text-emerald-300 font-bold">
+                        ${usage ? usage.estimatedCostUSD.toFixed(4) : "0.0000"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-slate-400 pt-1">
+                      <span>Sessions: {usage?.sessionCount ?? 0}</span>
+                      <span>Voice tokens: {((usage?.liveInputTokens ?? 0) + (usage?.liveOutputTokens ?? 0)).toLocaleString()}</span>
+                    </div>
+                    <p className="text-[8px] text-slate-500 uppercase font-mono pt-1">
+                      Rough estimate from token counts, not your actual Google Cloud bill
+                    </p>
                   </div>
                 </div>
               )}
