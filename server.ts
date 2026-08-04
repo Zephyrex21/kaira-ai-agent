@@ -26,6 +26,14 @@ import { Todo } from "./src/lib/todoTypes";
 import { loadJournal, saveJournal, todayKey } from "./server_journal";
 import { JournalEntry } from "./src/lib/journalTypes";
 import {
+  isCalendarConfigured,
+  isCalendarConnected,
+  buildAuthUrl,
+  exchangeCodeForTokens,
+  listUpcomingEvents,
+  createCalendarEvent,
+} from "./server_calendar";
+import {
   DATA_DIR,
   dataFile,
   getGeminiApiKey,
@@ -104,6 +112,9 @@ const TODO_TOOLS: ReadonlySet<string> = new Set(["addTodo", "listTodos", "comple
 
 /** Phase 3: daily check-in journal, handled server-side. */
 const JOURNAL_TOOLS: ReadonlySet<string> = new Set(["getTodaysJournalStatus", "addJournalEntry", "listRecentJournalEntries"]);
+
+/** Phase 4: Google Calendar, handled server-side. */
+const CALENDAR_TOOLS: ReadonlySet<string> = new Set(["getCalendarConnectionStatus", "listUpcomingEvents", "createCalendarEvent"]);
 
 /**
  * Call the Python desktop agent.  Returns the parsed JSON response.
@@ -429,6 +440,45 @@ async function startServer() {
     } catch (e: any) {
       logError(`APIKEY_SAVE_ERROR: ${e?.message || e}`);
       res.status(500).json({ error: e?.message || "Failed to save API key." });
+    }
+  });
+
+  // Phase 4: Google Calendar OAuth — a real browser round-trip through
+  // Google's consent screen, so this has to be routes the Settings UI opens,
+  // not something voice alone can drive.
+  app.get("/api/calendar/status", (_req, res) => {
+    res.json({ configured: isCalendarConfigured() });
+  });
+
+  app.get("/api/calendar/connected", async (_req, res) => {
+    res.json({ connected: await isCalendarConnected() });
+  });
+
+  app.get("/api/calendar/auth", (_req, res) => {
+    if (!isCalendarConfigured()) {
+      return res.status(400).send("Calendar isn't configured yet — add GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET to your .env first.");
+    }
+    res.redirect(buildAuthUrl());
+  });
+
+  app.get("/api/calendar/callback", async (req, res) => {
+    const code = req.query.code as string | undefined;
+    if (!code) {
+      return res.status(400).send("Missing authorization code.");
+    }
+    try {
+      await exchangeCodeForTokens(code);
+      res.send(`
+        <html><body style="background:#020206;color:#e2e8f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
+          <div style="text-align:center;">
+            <h2>Calendar connected ✅</h2>
+            <p style="color:#94a3b8;">You can close this tab and go back to Kaira.</p>
+          </div>
+        </body></html>
+      `);
+    } catch (e: any) {
+      console.error("[Calendar] OAuth callback failed:", e);
+      res.status(500).send(`Calendar connection failed: ${e.message}`);
     }
   });
 
@@ -928,7 +978,8 @@ async function startServer() {
         "   - SETTINGS: The user can also configure these in the SETTINGS panel in the UI. If they mention settings, let them know they can adjust them there too.\n" +
         "12. YOUR CREATOR: You were built and designed by Saurabh Raj Shekhar — a Computer Science (Data Science) student and developer (GitHub: github.com/Zephyrex21). If TECH or anyone else asks who made you, who built you, who created you, or who your developer/owner is, answer warmly and proudly that Saurabh Raj Shekhar created and built you.\n" +
         "13. LIVE WEB SEARCH: You have real-time Google Search access built in. Use it naturally whenever a question needs current information — news, prices, scores, weather, facts past your training, anything time-sensitive. You don't need to announce that you're searching; just answer with the up-to-date result.\n" +
-        "14. DAILY CHECK-IN: Near the start of a conversation, quietly call getTodaysJournalStatus once. If TECH hasn't checked in yet today and the mood feels right, naturally work in a warm 'how's your day going?' at some point — don't force it or lead with it if they're clearly focused on something else. If they share something, call addJournalEntry with a brief summary. This is a light touch, not an interrogation — one gentle ask per day, never repeat it if they brush it off.";
+        "14. DAILY CHECK-IN: Near the start of a conversation, quietly call getTodaysJournalStatus once. If TECH hasn't checked in yet today and the mood feels right, naturally work in a warm 'how's your day going?' at some point — don't force it or lead with it if they're clearly focused on something else. If they share something, call addJournalEntry with a brief summary. This is a light touch, not an interrogation — one gentle ask per day, never repeat it if they brush it off.\n" +
+        "15. GOOGLE CALENDAR: If TECH asks about their schedule, upcoming events, or to book something, use listUpcomingEvents / createCalendarEvent. If getCalendarConnectionStatus (or an error) shows it isn't connected yet, tell them to open Settings and connect their calendar there — you can't do it for them, it needs a browser sign-in.";
 
       const finalInstructions = formatSystemInstructionsWithMemories(baseInstructions, memories) +
         `\n\n=== CURRENT DATE & TIME ===\nRight now it is ${new Date().toString()}. Use this as your reference point whenever you compute a reminder or timer due-time from a relative phrase like "in 10 minutes" or "tomorrow at 9am".\n===========================\n`;
@@ -1208,6 +1259,37 @@ async function startServer() {
                   name: "listRecentJournalEntries",
                   description: "Lists the last several days of journal check-in entries, e.g. if TECH asks how they've been feeling lately.",
                   parameters: { type: Type.OBJECT, properties: {} }
+                },
+
+                // ======== PHASE 4: GOOGLE CALENDAR ========
+                {
+                  name: "getCalendarConnectionStatus",
+                  description: "Check whether Google Calendar has been connected yet. If not connected, tell TECH to open Settings and connect it.",
+                  parameters: { type: Type.OBJECT, properties: {} }
+                },
+                {
+                  name: "listUpcomingEvents",
+                  description: "Lists TECH's upcoming Google Calendar events, soonest first.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      maxResults: { type: Type.NUMBER, description: "How many events to return. Defaults to 10." }
+                    }
+                  }
+                },
+                {
+                  name: "createCalendarEvent",
+                  description: "Creates a new event on TECH's primary Google Calendar. Compute startISO/endISO yourself from the current date/time given in your instructions.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      summary: { type: Type.STRING, description: "Event title." },
+                      startISO: { type: Type.STRING, description: "ISO 8601 start time." },
+                      endISO: { type: Type.STRING, description: "ISO 8601 end time." },
+                      description: { type: Type.STRING, description: "Optional event details." }
+                    },
+                    required: ["summary", "startISO", "endISO"]
+                  }
                 },
 
                 // ======== DESKTOP CONTROL TOOLS (routed to Python agent) ========
@@ -1742,6 +1824,30 @@ async function startServer() {
                     } catch (err: any) {
                       console.error(`${fc.name} execution failure:`, err);
                       session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output: { error: String(err) } }, id: fc.id }] });
+                    } finally {
+                      clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "end" }));
+                    }
+                  })();
+                } else if (CALENDAR_TOOLS.has(fc.name)) {
+                  clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "start" }));
+                  (async () => {
+                    try {
+                      let output: Record<string, unknown>;
+                      if (fc.name === "getCalendarConnectionStatus") {
+                        output = { connected: await isCalendarConnected(), configured: isCalendarConfigured() };
+                      } else if (fc.name === "listUpcomingEvents") {
+                        const args = fc.args as any;
+                        output = { events: await listUpcomingEvents(args.maxResults || 10) };
+                      } else {
+                        // createCalendarEvent
+                        const args = fc.args as any;
+                        const event = await createCalendarEvent(args.summary, args.startISO, args.endISO, args.description);
+                        output = { result: `Created: ${event.summary}`, eventId: event.id };
+                      }
+                      session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output }, id: fc.id }] });
+                    } catch (err: any) {
+                      console.error(`${fc.name} execution failure:`, err);
+                      session.sendToolResponse({ functionResponses: [{ name: fc.name, response: { output: { error: err.message || String(err) } }, id: fc.id }] });
                     } finally {
                       clientWs.send(JSON.stringify({ type: "toolStatus", name: fc.name, phase: "end" }));
                     }

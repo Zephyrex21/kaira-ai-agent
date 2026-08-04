@@ -77,6 +77,28 @@ export function SettingsPanel({ isOpen, onClose, settings, onChange, themeColor 
     ram?: string;
   }>({ online: false });
 
+  // Phase 4: Google Calendar connection status.
+  const [calendarStatus, setCalendarStatus] = useState<{ configured: boolean; connected: boolean }>({
+    configured: false,
+    connected: false,
+  });
+  useEffect(() => {
+    if (!isOpen) return;
+    (async () => {
+      try {
+        const [statusRes, connectedRes] = await Promise.all([
+          fetch("/api/calendar/status", { cache: "no-store" }),
+          fetch("/api/calendar/connected", { cache: "no-store" }),
+        ]);
+        const status = await statusRes.json();
+        const connected = await connectedRes.json();
+        setCalendarStatus({ configured: status.configured, connected: connected.connected });
+      } catch {
+        /* server may not be ready yet */
+      }
+    })();
+  }, [isOpen]);
+
   // Enumerate microphones (mirrors how audio.ts grabs getUserMedia).
   useEffect(() => {
     if (!isOpen) return;
@@ -409,6 +431,44 @@ export function SettingsPanel({ isOpen, onClose, settings, onChange, themeColor 
                       <span>✓ Screenshot</span>
                       <span>✓ Clipboard</span>
                     </div>
+                  </div>
+
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 pt-2">
+                    Integrations
+                  </div>
+
+                  <div
+                    className={`p-4 rounded-xl border flex items-center gap-3 ${
+                      calendarStatus.connected
+                        ? "border-emerald-500/20 bg-emerald-500/5"
+                        : "border-white/10 bg-white/5"
+                    }`}
+                  >
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                        calendarStatus.connected ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                      }`}
+                    />
+                    <div className="flex-1">
+                      <div className="text-xs font-mono text-white">Google Calendar</div>
+                      <div className="text-[10px] font-mono text-slate-400">
+                        {!calendarStatus.configured
+                          ? "Add GOOGLE_CALENDAR_CLIENT_ID/SECRET to .env first"
+                          : calendarStatus.connected
+                          ? "Connected"
+                          : "Not connected"}
+                      </div>
+                    </div>
+                    {calendarStatus.configured && !calendarStatus.connected && (
+                      <a
+                        href="/api/calendar/auth"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[10px] uppercase font-mono tracking-widest transition cursor-pointer"
+                      >
+                        Connect
+                      </a>
+                    )}
                   </div>
                 </div>
               )}
