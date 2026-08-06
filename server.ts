@@ -842,6 +842,9 @@ async function startServer() {
           ]
         },
         callbacks: {
+          onopen: () => {
+            console.log("[Gemini Live] WebSocket opened.");
+          },
           onmessage: (message: LiveServerMessage) => {
             // Phase 6: cost tracking — capture token usage as it streams in.
             if (message.usageMetadata) {
@@ -1144,9 +1147,23 @@ async function startServer() {
               }
             }
           },
-          onclose: () => {
-            console.log("Gemini Live session closed");
-            clientWs.send(JSON.stringify({ type: "status", status: "session_closed" }));
+          onclose: (e: any) => {
+            const code = e?.code;
+            const reason = e?.reason || "(no reason given)";
+            console.log(`[Gemini Live] Session closed. code=${code} reason=${reason}`);
+            logError(`GEMINI_SESSION_CLOSED code=${code} reason=${reason}`);
+            clientWs.send(JSON.stringify({
+              type: "status",
+              status: "session_closed",
+              closeCode: code,
+              closeReason: reason,
+            }));
+          },
+          onerror: (e: any) => {
+            const msg = e?.message || String(e);
+            console.error(`[Gemini Live] Error: ${msg}`);
+            logError(`GEMINI_SESSION_ERROR ${msg}`);
+            clientWs.send(JSON.stringify({ type: "error", error: `Gemini Live error: ${msg}` }));
           }
         }
       });
