@@ -116,6 +116,35 @@ export function SettingsPanel({ isOpen, onClose, settings, onChange, themeColor 
       .catch(() => {});
   }, [isOpen]);
 
+  // API key source diagnostic — a stored key (set via this same Settings
+  // panel previously) silently overrides .env, which is easy to forget mid-
+  // debugging. Surface it plainly and offer a one-click reset.
+  const [keySource, setKeySource] = useState<"stored" | "env" | "none" | null>(null);
+  const [resettingKey, setResettingKey] = useState(false);
+  const [confirmResetKey, setConfirmResetKey] = useState(false);
+  const refreshKeySource = () => {
+    fetch("/api/config", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setKeySource(d.keySource ?? null))
+      .catch(() => {});
+  };
+  useEffect(() => {
+    if (!isOpen) return;
+    refreshKeySource();
+  }, [isOpen]);
+  const handleResetStoredKey = async () => {
+    setResettingKey(true);
+    try {
+      await fetch("/api/config/apikey", { method: "DELETE" });
+      refreshKeySource();
+    } catch {
+      /* best-effort */
+    } finally {
+      setResettingKey(false);
+      setConfirmResetKey(false);
+    }
+  };
+
   // Enumerate microphones (mirrors how audio.ts grabs getUserMedia).
   useEffect(() => {
     if (!isOpen) return;
@@ -539,6 +568,50 @@ export function SettingsPanel({ isOpen, onClose, settings, onChange, themeColor 
                         <span className="text-slate-300">Web Speech API</span>
                       </div>
                     </div>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border space-y-2 ${
+                    keySource === "stored"
+                      ? "border-amber-500/25 bg-amber-500/5"
+                      : "border-white/10 bg-white/5"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">API Key Source</span>
+                      <span className={`text-xs font-mono font-bold ${keySource === "stored" ? "text-amber-300" : "text-slate-300"}`}>
+                        {keySource === "stored" ? "Stored (overrides .env)" : keySource === "env" ? ".env" : keySource === "none" ? "Not set" : "..."}
+                      </span>
+                    </div>
+                    {keySource === "stored" && (
+                      <>
+                        <p className="text-[10px] text-amber-200/80 leading-relaxed">
+                          A key saved earlier through this app is active and taking priority over whatever is in your .env file — editing .env won't change anything while this remains set.
+                        </p>
+                        {!confirmResetKey ? (
+                          <button
+                            onClick={() => setConfirmResetKey(true)}
+                            className="w-full px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 text-[10px] font-mono uppercase tracking-widest transition cursor-pointer"
+                          >
+                            Clear stored key (use .env instead)
+                          </button>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setConfirmResetKey(false)}
+                              className="flex-1 px-3 py-2 rounded-lg border border-white/10 text-slate-300 text-[10px] font-mono uppercase tracking-widest transition cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleResetStoredKey}
+                              disabled={resettingKey}
+                              className="flex-1 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] uppercase font-mono tracking-widest transition disabled:opacity-50 cursor-pointer"
+                            >
+                              {resettingKey ? "Clearing..." : "Confirm clear"}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   <div className="p-3 rounded-xl border border-amber-500/15 bg-amber-500/5 flex items-start gap-2">

@@ -61,6 +61,17 @@ export function getGeminiApiKey(): string | undefined {
   return env || undefined;
 }
 
+/**
+ * Which source is actually providing the active key — a stored key in
+ * secrets.json always wins over .env, which is easy to forget mid-debugging
+ * (editing .env repeatedly has no effect while an old stored key remains).
+ */
+export function getGeminiApiKeySource(): "stored" | "env" | "none" {
+  if (readSecrets().geminiApiKey?.trim()) return "stored";
+  if (process.env.GEMINI_API_KEY?.trim()) return "env";
+  return "none";
+}
+
 /** Whether any usable key is configured (without revealing it). */
 export function hasGeminiApiKey(): boolean {
   return Boolean(getGeminiApiKey());

@@ -46,8 +46,10 @@ import {
   DATA_DIR,
   dataFile,
   getGeminiApiKey,
+  getGeminiApiKeySource,
   hasGeminiApiKey,
   setGeminiApiKey,
+  clearGeminiApiKey,
 } from "./server_paths";
 
 dotenv.config();
@@ -89,6 +91,25 @@ const CALENDAR_TOOLS: ReadonlySet<string> = new Set(["getCalendarConnectionStatu
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Diagnostic: make the API key source impossible to miss. A key saved via
+  // the in-app Settings UI (secrets.json) always wins over .env — editing
+  // .env has zero effect while a stored key remains. This log exists so that
+  // fact is visible on every boot instead of discovered after hours of
+  // debugging.
+  {
+    const source = getGeminiApiKeySource();
+    const secretsPath = dataFile("secrets.json");
+    console.log(`[API Key] Data directory: ${DATA_DIR}`);
+    console.log(`[API Key] Active source: ${source === "none" ? "NONE — not configured" : source}`);
+    if (source === "stored") {
+      console.log(`[API Key] Using the key stored at: ${secretsPath}`);
+      console.log(`[API Key] Your .env's GEMINI_API_KEY is being IGNORED while this file has a key.`);
+      console.log(`[API Key] To make .env take effect again, clear the stored key (Settings, or DELETE /api/config/apikey).`);
+    } else if (source === "env") {
+      console.log(`[API Key] Using GEMINI_API_KEY from .env (no stored key at ${secretsPath}).`);
+    }
+  }
   
   app.use(express.json());
 
@@ -218,7 +239,20 @@ async function startServer() {
   // GET reports only whether a key exists — the key itself is never returned.
   // ---------------------------------------------------------------------------
   app.get("/api/config", (_req, res) => {
-    res.json({ hasApiKey: hasGeminiApiKey() });
+    res.json({ hasApiKey: hasGeminiApiKey(), keySource: getGeminiApiKeySource() });
+  });
+
+  // Clears a stored (secrets.json) key so .env's GEMINI_API_KEY takes effect
+  // again. Wires up clearGeminiApiKey, which previously existed but was never
+  // called from anywhere.
+  app.delete("/api/config/apikey", (_req, res) => {
+    try {
+      clearGeminiApiKey();
+      logStartup("APIKEY_CLEARED via /api/config/apikey");
+      res.json({ success: true, keySource: getGeminiApiKeySource() });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to clear stored key." });
+    }
   });
 
   app.post("/api/config/apikey", async (req, res) => {
