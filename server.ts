@@ -862,8 +862,11 @@ async function startServer() {
         // side (confirmed via a matching, still-open report on Google's own
         // developer forum: instant "exceeded quota" on brand-new projects/
         // keys). Swap back to "gemini-3.1-flash-live-preview" once Google
-        // resolves that.
-        model: "gemini-2.5-flash-live-preview",
+        // resolves that. Verified this exact endpoint string directly
+        // against ai.google.dev/gemini-api/docs/models on 2026-08-09 — the
+        // model's display name is "Gemini 2.5 Flash Live" but its real API
+        // identifier is this longer dated string, not a shorter guess.
+        model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
