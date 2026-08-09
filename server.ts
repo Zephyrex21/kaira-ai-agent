@@ -857,7 +857,13 @@ async function startServer() {
           : "Aoede";
 
       const session = await ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
+        // NOTE: temporarily on the 2.5 Live model instead of 3.1 — the 3.1
+        // preview model's free-tier quota is currently broken on Google's
+        // side (confirmed via a matching, still-open report on Google's own
+        // developer forum: instant "exceeded quota" on brand-new projects/
+        // keys). Swap back to "gemini-3.1-flash-live-preview" once Google
+        // resolves that.
+        model: "gemini-2.5-flash-live-preview",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
