@@ -869,6 +869,13 @@ async function startServer() {
         model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
           responseModalities: [Modality.AUDIO],
+          // This model thinks by default, which was leaking its full
+          // reasoning text into the on-screen captions (the overflowing
+          // text wall) and adding real latency before she actually speaks —
+          // thinkingBudget: 0 turns generation of thought tokens off
+          // entirely, fixing both at the source rather than just hiding the
+          // symptom client-side.
+          thinkingConfig: { thinkingBudget: 0 },
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
           },
@@ -898,7 +905,12 @@ async function startServer() {
             }
 
             // Audio Stream Chunk (model response audio play, 24kHz raw PCM)
-            const audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            // Find the first non-thought part — thinkingBudget: 0 above
+            // should prevent thought parts entirely, but this is a cheap
+            // second layer so reasoning content can never reach the client.
+            const modelParts = (message.serverContent?.modelTurn?.parts ?? []) as any[];
+            const firstSpokenPart = modelParts.find((p) => !p?.thought);
+            const audio = firstSpokenPart?.inlineData?.data;
             if (audio) {
               clientWs.send(JSON.stringify({ type: "audio", audio }));
             }
@@ -934,8 +946,9 @@ async function startServer() {
               }
             }
             
-            // Transcription of model output (text chunk)
-            const modelText = (message.serverContent as any)?.modelTurn?.parts?.[0]?.text;
+            // Transcription of model output (text chunk) — same non-thought
+            // part found above, so reasoning text never hits the caption UI.
+            const modelText = firstSpokenPart?.text;
             if (modelText) {
               clientWs.send(JSON.stringify({ type: "transcription", role: "model", text: modelText }));
               currentModelResponseText += modelText;
