@@ -52,6 +52,16 @@ export const DESKTOP_TOOLS: ReadonlySet<string> = new Set([
  */
 let desktopAgentVerified = false;
 
+/**
+ * An in-flight ensureDesktopAgent() attempt, if one is running. Concurrent
+ * callers (e.g. the boot-time check and a tool call arriving moments later)
+ * await this same attempt instead of each spawning their own competing
+ * process on the same port — which is what was causing the agent to never
+ * come online: multiple uvicorn instances fighting over :8765, none of them
+ * starting cleanly.
+ */
+let inFlightEnsure: Promise<void> | null = null;
+
 // Injected logging hooks so this module doesn't need to know about the log
 // file layout — server.ts wires its appendLog-based loggers in via this.
 type Logger = (message: string) => void;
@@ -151,26 +161,43 @@ async function isDesktopAgentAlive(): Promise<boolean> {
 
 /**
  * Ensure the desktop agent is running. If not verified yet, probe health; if
- * down, auto-spawn and poll until it is ready (or timeout).
+ * down, auto-spawn and poll until it is ready (or timeout). Concurrent calls
+ * share a single in-flight attempt rather than each spawning their own
+ * process on the same port.
  */
 export async function ensureDesktopAgent(): Promise<void> {
   if (desktopAgentVerified) return;
-  if (await isDesktopAgentAlive()) {
-    desktopAgentVerified = true;
-    console.log("[Desktop Agent] Already running — 52 tools available.");
-    return;
-  }
-  console.log("[Desktop Agent] Not detected. Auto-starting...");
-  spawnDesktopAgent();
-  for (let i = 1; i <= 20; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
-    if (await isDesktopAgentAlive()) {
-      desktopAgentVerified = true;
-      console.log(`[Desktop Agent] Online after ${i}s — 52 tools available.`);
-      return;
+  if (inFlightEnsure) return inFlightEnsure;
+
+  inFlightEnsure = (async () => {
+    try {
+      if (await isDesktopAgentAlive()) {
+        desktopAgentVerified = true;
+        console.log("[Desktop Agent] Already running — 52 tools available.");
+        return;
+      }
+      console.log("[Desktop Agent] Not detected. Auto-starting...");
+      spawnDesktopAgent();
+      // A fresh process (imports pywin32/pycaw/playwright/etc.) can
+      // genuinely take longer than 20s on a slower machine or a cold
+      // filesystem cache — 45s gives it real room without the caller
+      // waiting indefinitely, and since this attempt is now shared, later
+      // callers no longer restart the clock by spawning a duplicate.
+      for (let i = 1; i <= 45; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        if (await isDesktopAgentAlive()) {
+          desktopAgentVerified = true;
+          console.log(`[Desktop Agent] Online after ${i}s — 52 tools available.`);
+          return;
+        }
+      }
+      console.warn("[Desktop Agent] Did not come online within 45s. Desktop control will be unavailable.");
+    } finally {
+      inFlightEnsure = null;
     }
-  }
-  console.warn("[Desktop Agent] Did not come online within 20s. Desktop control will be unavailable.");
+  })();
+
+  return inFlightEnsure;
 }
 
 /**
