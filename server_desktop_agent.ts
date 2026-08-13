@@ -87,6 +87,21 @@ function spawnDesktopAgent(): void {
     KAIRA_AGENT_PORT: "8765",
   };
 
+  // Capture the agent's stdout/stderr to a log file instead of discarding it
+  // (stdio: "ignore" previously meant a crash on the Python side — import
+  // error, port already in use, any startup exception — was completely
+  // invisible; we'd only ever see "did not come online", never why).
+  const agentLogPath = path.join(process.cwd(), "logs", "desktop_agent.log");
+  let agentLogFd: number | "ignore" = "ignore";
+  try {
+    fs.mkdirSync(path.dirname(agentLogPath), { recursive: true });
+    agentLogFd = fs.openSync(agentLogPath, "a");
+    fs.appendFileSync(agentLogPath, `\n--- spawn attempt ${new Date().toISOString()} ---\n`);
+  } catch {
+    // Fall back to "ignore" below if the log file can't be opened — this is
+    // best-effort diagnostics, not something that should block a spawn.
+  }
+
   // Preferred path (packaged app): a PyInstaller-frozen agent exe that embeds
   // its own Python runtime. Set by the Electron main process via KAIRA_AGENT_EXE.
   const frozenExe = process.env.KAIRA_AGENT_EXE;
@@ -95,13 +110,13 @@ function spawnDesktopAgent(): void {
       const child = spawn(frozenExe, [], {
         cwd: path.dirname(frozenExe),
         detached: true,
-        stdio: "ignore",
+        stdio: ["ignore", agentLogFd, agentLogFd],
         windowsHide: true, // never flash a console window
         env: agentEnv,
       });
       child.unref();
       logStartup(`AGENT_SPAWN frozen exe pid=${child.pid} path=${frozenExe}`);
-      console.log(`[Desktop Agent] Launched frozen agent (PID ${child.pid}).`);
+      console.log(`[Desktop Agent] Launched frozen agent (PID ${child.pid}). Output logged to logs/desktop_agent.log`);
       return;
     } catch (e: any) {
       logError(`AGENT_SPAWN_FROZEN_FAILED: ${e?.message || e}`);
@@ -133,11 +148,11 @@ function spawnDesktopAgent(): void {
     const child = spawn(
       py,
       ["-m", "uvicorn", "desktop_agent.main:app", "--host", "127.0.0.1", "--port", "8765"],
-      { cwd: process.cwd(), detached: true, stdio: "ignore", windowsHide: true, env: agentEnv }
+      { cwd: process.cwd(), detached: true, stdio: ["ignore", agentLogFd, agentLogFd], windowsHide: true, env: agentEnv }
     );
     child.unref();
     logStartup(`AGENT_SPAWN python pid=${child.pid}`);
-    console.log(`[Desktop Agent] Auto-spawned via Python (PID ${child.pid}).`);
+    console.log(`[Desktop Agent] Auto-spawned via Python (PID ${child.pid}). Output logged to logs/desktop_agent.log`);
   } catch (e: any) {
     console.warn(`[Desktop Agent] Auto-spawn failed: ${e?.message || e}`);
     logError(`AGENT_SPAWN_PYTHON_FAILED: ${e?.message || e}`);
@@ -192,6 +207,13 @@ export async function ensureDesktopAgent(): Promise<void> {
         }
       }
       console.warn("[Desktop Agent] Did not come online within 45s. Desktop control will be unavailable.");
+      try {
+        const logPath = path.join(process.cwd(), "logs", "desktop_agent.log");
+        const tail = fs.readFileSync(logPath, "utf-8").split("\n").slice(-25).join("\n");
+        console.warn(`[Desktop Agent] Last output from the agent process (logs/desktop_agent.log):\n${tail}`);
+      } catch {
+        console.warn("[Desktop Agent] No log output was captured either — the process may have failed to start at all (check the Python interpreter path).");
+      }
     } finally {
       inFlightEnsure = null;
     }
