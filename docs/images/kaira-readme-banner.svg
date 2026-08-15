@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="520" viewBox="0 0 1600 520">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#050612"/><stop offset="55%" stop-color="#090B1B"/><stop offset="100%" stop-color="#11132B"/></linearGradient>
+    <radialGradient id="orb1"><stop offset="0%" stop-color="#6D5DFB" stop-opacity=".38"/><stop offset="100%" stop-color="#6D5DFB" stop-opacity="0"/></radialGradient>
+    <radialGradient id="orb2"><stop offset="0%" stop-color="#28D7FF" stop-opacity=".20"/><stop offset="100%" stop-color="#28D7FF" stop-opacity="0"/></radialGradient>
+    <linearGradient id="holo" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#8C7BFF"/><stop offset="100%" stop-color="#2BD7FF"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="10" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#000000" flood-opacity=".48"/></filter>
+    <style>
+      .title { font: 700 72px "Plus Jakarta Sans", Arial, sans-serif; fill:#F7F8FF; }
+      .sub { font: 500 24px "Plus Jakarta Sans", Arial, sans-serif; fill:#AEB4CD; }
+      .micro { font: 700 13px "Plus Jakarta Sans", Arial, sans-serif; fill:#7CE7FF; letter-spacing:3px; }
+      .pill { font: 700 12px "Plus Jakarta Sans", Arial, sans-serif; fill:#C9D0E7; letter-spacing:1px; }
+      .ui { font: 600 11px "Plus Jakarta Sans", Arial, sans-serif; fill:#D7DCF1; }
+    </style>
+  </defs>
+  <rect width="1600" height="520" rx="28" fill="url(#bg)"/>
+  <circle cx="1310" cy="190" r="340" fill="url(#orb1)"/><circle cx="1480" cy="390" r="260" fill="url(#orb2)"/><circle cx="250" cy="30" r="210" fill="url(#orb1)" opacity=".35"/>
+  <g opacity=".10" stroke="#7C82A8" stroke-width="1"><path d="M0 90H1600M0 180H1600M0 270H1600M0 360H1600M0 450H1600"/><path d="M120 0V520M240 0V520M360 0V520M480 0V520M600 0V520M720 0V520M840 0V520M960 0V520M1080 0V520M1200 0V520M1320 0V520M1440 0V520"/></g>
+  <g transform="translate(92,78)"><text x="0" y="0" class="micro">REAL-TIME MULTIMODAL AGENT</text><text x="0" y="84" class="title">KAIRA</text><text x="0" y="132" class="sub">Voice-first AI that can listen, see, remember, reason,</text><text x="0" y="165" class="sub">and operate your desktop.</text>
+    <g transform="translate(0,205)"><rect x="0" y="0" width="125" height="34" rx="17" fill="#11142A" stroke="#2A3155"/><text x="62" y="22" text-anchor="middle" class="pill">GEMINI LIVE</text><rect x="137" y="0" width="122" height="34" rx="17" fill="#11142A" stroke="#2A3155"/><text x="198" y="22" text-anchor="middle" class="pill">ELECTRON</text><rect x="271" y="0" width="105" height="34" rx="17" fill="#11142A" stroke="#2A3155"/><text x="323" y="22" text-anchor="middle" class="pill">PYTHON</text><rect x="388" y="0" width="105" height="34" rx="17" fill="#11142A" stroke="#2A3155"/><text x="440" y="22" text-anchor="middle" class="pill">FASTAPI</text></g>
+  </g>
+  <g transform="translate(1030,78)" filter="url(#shadow)"><rect x="0" y="0" width="470" height="362" rx="32" fill="#0C0F21" fill-opacity=".88" stroke="#252B4C" stroke-width="2"/><rect x="22" y="22" width="426" height="318" rx="24" fill="#080A17" stroke="#1B2342"/><text x="48" y="54" class="ui">KAIRA CORE</text><circle cx="394" cy="49" r="6" fill="#41E6B2" filter="url(#glow)"/><text x="374" y="74" class="ui" text-anchor="end">ONLINE</text>
+    <g transform="translate(138,170)" fill="none" stroke="url(#holo)" filter="url(#glow)"><ellipse rx="112" ry="52" stroke-width="2" opacity=".32"/><ellipse rx="92" ry="92" stroke-width="2" opacity=".28"/><ellipse rx="62" ry="116" stroke-width="2" opacity=".22"/><path d="M-105 0H105M0-105V105" stroke-width="1" opacity=".18"/><circle r="24" fill="#151B3B" stroke-width="3" opacity=".95"/><circle r="9" fill="#7B6BFF" stroke="none"/></g>
+    <g transform="translate(262,105)"><rect width="152" height="48" rx="15" fill="#111632" stroke="#29345C"/><text x="16" y="20" class="ui">VOICE STREAM</text><text x="16" y="36" class="ui">16kHz → Live API</text></g>
+    <g transform="translate(262,166)"><rect width="152" height="48" rx="15" fill="#111632" stroke="#29345C"/><text x="16" y="20" class="ui">TOOL ROUTER</text><text x="16" y="36" class="ui">60+ capabilities</text></g>
+    <g transform="translate(262,227)"><rect width="152" height="48" rx="15" fill="#111632" stroke="#29345C"/><text x="16" y="20" class="ui">MEMORY CORE</text><text x="16" y="36" class="ui">Persistent context</text></g>
+    <g transform="translate(262,288)"><rect width="152" height="36" rx="14" fill="#0D1326"/><circle cx="18" cy="18" r="4" fill="#2BD7FF"/><text x="31" y="22" class="ui">BROWSER • PC • FILES</text></g>
+  </g>
+  <path d="M840 257 C895 257 940 257 1010 257" fill="none" stroke="url(#holo)" stroke-width="2" opacity=".45"/><circle cx="838" cy="257" r="6" fill="#7B6BFF" filter="url(#glow)"/><circle cx="1010" cy="257" r="5" fill="#2BD7FF" filter="url(#glow)"/>
+  <text x="92" y="456" class="micro" opacity=".75">VOICE • VISION • MEMORY • AUTOMATION</text><text x="1500" y="456" class="ui" text-anchor="end" opacity=".55">KAIRA AI AGENT</text>
+</svg>
