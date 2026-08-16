@@ -125,25 +125,44 @@ function spawnDesktopAgent(): void {
   }
 
   // Development fallback: run the agent from source using a local Python.
+  const venvPython = process.platform === "win32"
+    ? path.join(process.cwd(), "venv", "Scripts", "python.exe")
+    : path.join(process.cwd(), "venv", "bin", "python");
+
   const candidates = [
     process.env.KAIRA_PYTHON,
+    // The project's own venv — this is where `pip install -r
+    // desktop_agent\requirements.txt` actually installs everything when
+    // followed exactly as documented. Checked before any bare "python" on
+    // PATH, which resolves to the *system* interpreter — a completely
+    // separate environment that never has these packages installed into it.
+    venvPython,
     "C:\\Users\\MSI\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
     "python",
     "python3",
   ].filter(Boolean) as string[];
+
   const py = candidates.find((p) => {
     try {
-      execSync(`"${p}" --version`, { stdio: "ignore" });
+      // Checking "--version" only proves the interpreter runs — it says
+      // nothing about whether the required packages are actually installed
+      // in it, which is exactly how this bug happened: the system Python
+      // runs fine, it's just missing uvicorn/fastapi/everything else. Import
+      // the one package every code path here needs instead.
+      execSync(`"${p}" -c "import uvicorn"`, { stdio: "ignore" });
       return true;
     } catch {
       return false;
     }
   });
   if (!py) {
-    console.warn("[Desktop Agent] No frozen agent and no Python interpreter found; desktop control unavailable.");
-    logError("AGENT_SPAWN_NO_RUNTIME: neither KAIRA_AGENT_EXE nor Python available");
+    const checked = candidates.join(", ");
+    console.warn(`[Desktop Agent] No Python interpreter with the required packages found. Checked: ${checked}`);
+    console.warn(`[Desktop Agent] If you set up a venv, make sure it's at ${venvPython} — or run: pip install -r desktop_agent\\requirements.txt inside it.`);
+    logError(`AGENT_SPAWN_NO_RUNTIME: none of [${checked}] have uvicorn installed`);
     return;
   }
+  console.log(`[Desktop Agent] Using Python interpreter: ${py}`);
   try {
     const child = spawn(
       py,
@@ -151,7 +170,7 @@ function spawnDesktopAgent(): void {
       { cwd: process.cwd(), detached: true, stdio: ["ignore", agentLogFd, agentLogFd], windowsHide: true, env: agentEnv }
     );
     child.unref();
-    logStartup(`AGENT_SPAWN python pid=${child.pid}`);
+    logStartup(`AGENT_SPAWN python=${py} pid=${child.pid}`);
     console.log(`[Desktop Agent] Auto-spawned via Python (PID ${child.pid}). Output logged to logs/desktop_agent.log`);
   } catch (e: any) {
     console.warn(`[Desktop Agent] Auto-spawn failed: ${e?.message || e}`);
