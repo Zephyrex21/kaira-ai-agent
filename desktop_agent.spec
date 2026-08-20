@@ -10,9 +10,12 @@ Notes:
   must be listed as a hiddenimport or PyInstaller will not bundle it.
 - pywin32 / pycaw / comtypes have runtime-only submodules that also need to be
   declared explicitly.
-- Playwright is intentionally NOT bundled here: its ~300MB Chromium is only used
-  by the optional desktopBrowser* tools, whose imports are lazy and degrade
-  gracefully. Every other capability works without it.
+- Trimmed 2026-08-19: tools_clipboard, tools_browser (Playwright), tools_coding,
+  and tools_system were deleted outright (unused-by-voice bulk), so their
+  hiddenimports and packages (pyperclip, psutil, playwright, pytesseract,
+  nvidia-ml-py3) are gone too. tools_startup is still bundled — it's no longer
+  offered to Gemini as a voice tool, but the Settings-panel auto-start toggle
+  still calls it directly.
 - console=False → the agent runs with no console window (silent background).
 """
 
@@ -32,11 +35,7 @@ hiddenimports += [
     "desktop_agent.tools_files",
     "desktop_agent.tools_pc",
     "desktop_agent.tools_windows",
-    "desktop_agent.tools_clipboard",
     "desktop_agent.tools_screenshot",
-    "desktop_agent.tools_browser",
-    "desktop_agent.tools_coding",
-    "desktop_agent.tools_system",
     "desktop_agent.tools_startup",
 ]
 
@@ -58,14 +57,12 @@ hiddenimports += [
     "pywintypes",
     "pyautogui",
     "pygetwindow",
-    "pyperclip",
-    "psutil",
     "PIL",
     "PIL.Image",
 ]
 
 # Optional (graceful if unavailable at runtime).
-for opt in ("pytesseract", "send2trash", "nvidia_ml_py3", "pynvml"):
+for opt in ("send2trash",):
     try:
         hiddenimports.append(opt)
     except Exception:
@@ -81,7 +78,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        "playwright",
         "tkinter",
         # Headless server — no GUI toolkits. pyautogui's helper libs (mouseinfo,
         # pymsgbox) can pull in Qt bindings, and mixing PyQt5+PyQt6 aborts the

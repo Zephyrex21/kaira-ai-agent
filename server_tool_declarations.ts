@@ -313,21 +313,6 @@ export const TOOL_DECLARATIONS = [
                   parameters: { type: Type.OBJECT, properties: { query: { type: Type.STRING, description: "Search query." }, engine: { type: Type.STRING, description: "Engine name (default 'google')." } }, required: ["query"] }
                 },
                 {
-                  name: "searchYouTube",
-                  description: "Search YouTube and open results in the default browser.",
-                  parameters: { type: Type.OBJECT, properties: { query: { type: Type.STRING, description: "Search query." } }, required: ["query"] }
-                },
-                {
-                  name: "searchGoogle",
-                  description: "Search Google and open results in the default browser.",
-                  parameters: { type: Type.OBJECT, properties: { query: { type: Type.STRING, description: "Search query." } }, required: ["query"] }
-                },
-                {
-                  name: "searchGitHub",
-                  description: "Search GitHub repositories and open results in the default browser.",
-                  parameters: { type: Type.OBJECT, properties: { query: { type: Type.STRING, description: "Search query." } }, required: ["query"] }
-                },
-                {
                   name: "createFile",
                   description: "Create a new text file with optional content. Scoped to safe folders (Desktop, Documents, Downloads, etc.).",
                   parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING, description: "File path." }, content: { type: Type.STRING, description: "File content (default empty)." }, overwrite: { type: Type.BOOLEAN, description: "Overwrite if exists (default false)." } }, required: ["path"] }
@@ -418,26 +403,6 @@ export const TOOL_DECLARATIONS = [
                   parameters: { type: Type.OBJECT, properties: { title: { type: Type.STRING, description: "Window title to switch to." } } }
                 },
                 {
-                  name: "copySelected",
-                  description: "Copy selected text: sends Ctrl+C and reads the clipboard.",
-                  parameters: { type: Type.OBJECT, properties: { wait: { type: Type.NUMBER, description: "Seconds to wait after Ctrl+C (default 0.35)." } } }
-                },
-                {
-                  name: "pasteClipboard",
-                  description: "Paste text into the active input. Writes text to clipboard then sends Ctrl+V.",
-                  parameters: { type: Type.OBJECT, properties: { text: { type: Type.STRING, description: "Text to paste. If omitted, pastes current clipboard." } } }
-                },
-                {
-                  name: "getClipboard",
-                  description: "Read the current clipboard text content.",
-                  parameters: { type: Type.OBJECT, properties: { max_chars: { type: Type.INTEGER, description: "Max chars (default 1000)." } } }
-                },
-                {
-                  name: "clearClipboard",
-                  description: "Empty the clipboard.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
                   name: "takeScreenshot",
                   description: "Capture the full screen. Optionally include base64 image data.",
                   parameters: { type: Type.OBJECT, properties: { include_image: { type: Type.BOOLEAN, description: "Include base64 JPEG image (default false)." }, max_dim: { type: Type.INTEGER, description: "Max image dimension (default 1280)." } } }
@@ -446,101 +411,6 @@ export const TOOL_DECLARATIONS = [
                   name: "saveScreenshot",
                   description: "Save a screenshot to Pictures/KairaScreenshots.",
                   parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING, description: "Optional filename prefix." } } }
-                },
-                {
-                  name: "analyzeScreenshot",
-                  description: "Take a screenshot and run OCR to extract visible text from the screen.",
-                  parameters: { type: Type.OBJECT, properties: { max_chars: { type: Type.INTEGER, description: "Max OCR chars (default 1500)." } } }
-                },
-                {
-                  name: "readScreen",
-                  description: "OCR the active window and return its title plus visible text.",
-                  parameters: { type: Type.OBJECT, properties: { max_chars: { type: Type.INTEGER, description: "Max OCR chars (default 1500)." } } }
-                },
-                {
-                  name: "desktopBrowserOpen",
-                  description: "Open a URL in the desktop Playwright automation browser (real Chromium, separate from holographic UI).",
-                  parameters: { type: Type.OBJECT, properties: { url: { type: Type.STRING, description: "URL to open." } }, required: ["url"] }
-                },
-                {
-                  name: "desktopBrowserSearch",
-                  description: "Search within the desktop automation browser.",
-                  parameters: { type: Type.OBJECT, properties: { query: { type: Type.STRING, description: "Search query." }, engine: { type: Type.STRING, description: "Engine: google, youtube, github, duckduckgo, bing." } }, required: ["query"] }
-                },
-                {
-                  name: "desktopBrowserClick",
-                  description: "Click an element in the desktop automation browser by CSS selector or text.",
-                  parameters: { type: Type.OBJECT, properties: { selector: { type: Type.STRING, description: "CSS selector." }, text: { type: Type.STRING, description: "Text to find and click." } } }
-                },
-                {
-                  name: "desktopBrowserType",
-                  description: "Type text into the active element in the desktop automation browser.",
-                  parameters: { type: Type.OBJECT, properties: { text: { type: Type.STRING, description: "Text to type." }, selector: { type: Type.STRING, description: "Optional CSS selector for a specific input." }, clear: { type: Type.BOOLEAN, description: "Clear before typing (default true)." } }, required: ["text"] }
-                },
-                {
-                  name: "desktopBrowserFillForm",
-                  description: "Fill multiple form fields and optionally submit in the desktop automation browser.",
-                  parameters: { type: Type.OBJECT, properties: { fields: { type: Type.OBJECT, description: "Object of selector -> value pairs." }, submit: { type: Type.STRING, description: "Optional submit button selector." } }, required: ["fields"] }
-                },
-                {
-                  name: "desktopBrowserOpenTab",
-                  description: "Open a new tab in the desktop automation browser.",
-                  parameters: { type: Type.OBJECT, properties: { url: { type: Type.STRING, description: "URL for the new tab." } } }
-                },
-                {
-                  name: "desktopBrowserCloseTab",
-                  description: "Close the active tab in the desktop automation browser.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "desktopBrowserGoBack",
-                  description: "Navigate back in the desktop automation browser history.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "desktopBrowserGoForward",
-                  description: "Navigate forward in the desktop automation browser history.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "desktopBrowserScroll",
-                  description: "Scroll the desktop automation browser page.",
-                  parameters: { type: Type.OBJECT, properties: { direction: { type: Type.STRING, description: "Scroll direction: up or down." }, amount: { type: Type.INTEGER, description: "Pixels to scroll (default 500)." } } }
-                },
-                {
-                  name: "createPythonFile",
-                  description: "Create a Python (.py) file with content.",
-                  parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING, description: "File path." }, content: { type: Type.STRING, description: "Python code content." }, overwrite: { type: Type.BOOLEAN, description: "Overwrite if exists." } }, required: ["path"] }
-                },
-                {
-                  name: "writeCodeFile",
-                  description: "Create a code file in any language with appropriate extension.",
-                  parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING, description: "File path." }, content: { type: Type.STRING, description: "Code content." }, language: { type: Type.STRING, description: "Language name (e.g. 'python', 'javascript', 'html')." }, overwrite: { type: Type.BOOLEAN, description: "Overwrite if exists." } }, required: ["path"] }
-                },
-                {
-                  name: "createProjectFolder",
-                  description: "Create a project folder structure with optional subfolders and starter files.",
-                  parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING, description: "Project root folder path." }, subfolders: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of subfolder names." }, scaffold_standard: { type: Type.BOOLEAN, description: "Create src, tests, docs subfolders." }, files: { type: Type.OBJECT, description: "Object of relative-path -> content for starter files." } }, required: ["path"] }
-                },
-                {
-                  name: "runPythonScript",
-                  description: "Execute a Python script and capture stdout, stderr, and exit code. Has a configurable timeout.",
-                  parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING, description: "Script path." }, args: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Script arguments." }, timeout: { type: Type.INTEGER, description: "Timeout in seconds (default 30)." } }, required: ["path"] }
-                },
-                {
-                  name: "systemInfo",
-                  description: "Get system resource usage: CPU %, RAM %, disk usage, uptime, OS info.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "gpuInfo",
-                  description: "Get NVIDIA GPU stats: utilization %, VRAM usage, temperature. Graceful fallback if no NVIDIA GPU.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "temperatureInfo",
-                  description: "Get available temperature readings (CPU, GPU, etc.). Best-effort on Windows.",
-                  parameters: { type: Type.OBJECT, properties: {} }
                 },
                 // --- V2: Brightness control ---
                 {
@@ -573,22 +443,6 @@ export const TOOL_DECLARATIONS = [
                     },
                     required: ["percent"]
                   }
-                },
-                // --- V2: Windows auto-start management ---
-                {
-                  name: "enableAutoStart",
-                  description: "Enable KAIRA to launch automatically when Windows starts. Creates a silent startup entry.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "disableAutoStart",
-                  description: "Disable KAIRA auto-start on Windows login. Removes the startup entry.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "getAutoStartStatus",
-                  description: "Check whether KAIRA is currently configured to auto-start on Windows login.",
-                  parameters: { type: Type.OBJECT, properties: {} }
                 }
 
 ];

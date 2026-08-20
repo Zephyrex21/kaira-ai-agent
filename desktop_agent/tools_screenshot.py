@@ -1,14 +1,14 @@
 """
-Screenshot & screen-reading: capture, save, OCR, and read on-screen text.
+Screenshot capture: take and save screenshots.
 
-  takeScreenshot    -> capture full screen, return metadata (+ small base64)
-  saveScreenshot    -> capture & write to a file under the Screenshots folder
-  analyzeScreenshot-> capture, run OCR (pytesseract), return extracted text
-  readScreen        -> OCR the active window region + name the active window
+  takeScreenshot -> capture full screen, return metadata (+ small base64)
+  saveScreenshot -> capture & write to a file under the Screenshots folder
 
-OCR requires the Tesseract OCR engine + the pytesseract wrapper. If either is
-missing, the OCR tools return a graceful 'unavailable' message instead of
-crashing; non-OCR capture still works.
+OCR (analyzeScreenshot / readScreen) was removed (2026-08-19) — it
+overlapped with the live multimodal screen-vision stream (real-time frames
+while screen-share is on) and pulled in the pytesseract + Tesseract-engine
+dependency for a rarely-used path. Plain capture stays since it's cheap and
+still useful on its own.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import io
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .registry import ToolError, register
 
@@ -36,39 +36,6 @@ def _capture() -> "Any":
         raise ToolError(f"Screen capture failed: {e}")
 
 
-def _capture_region(bbox):
-    try:
-        from PIL import ImageGrab
-
-        return ImageGrab.grab(bbox=bbox, all_screens=False)
-    except Exception as e:  # noqa: BLE001
-        raise ToolError(f"Region capture failed: {e}")
-
-
-def _active_window_bbox():
-    """Return (left, top, right, bottom) of the foreground window, or None."""
-    try:
-        import win32gui
-
-        hwnd = win32gui.GetForegroundWindow()
-        if not hwnd:
-            return None
-        rect = win32gui.GetWindowRect(hwnd)  # (l, t, r, b)
-        return rect
-    except Exception:
-        return None
-
-
-def _active_window_title() -> str:
-    try:
-        import win32gui
-
-        hwnd = win32gui.GetForegroundWindow()
-        return win32gui.GetWindowText(hwnd) if hwnd else ""
-    except Exception:
-        return ""
-
-
 def _image_to_b64(img, fmt="PNG", quality=70) -> str:
     buf = io.BytesIO()
     if fmt.upper() == "JPEG":
@@ -76,50 +43,6 @@ def _image_to_b64(img, fmt="PNG", quality=70) -> str:
     else:
         img.save(buf, format=fmt)
     return base64.b64encode(buf.getvalue()).decode("ascii")
-
-
-def _image_size_kb(img) -> int:
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return len(buf.getvalue()) // 1024
-
-
-def _run_ocr(img) -> str:
-    try:
-        import pytesseract
-    except ImportError:
-        raise ToolError(
-            "OCR unavailable: the 'pytesseract' package is not installed."
-        )
-    # Ensure the Tesseract binary is discoverable.
-    exe = os.environ.get("TESSERACT_PATH") or _find_tesseract_exe()
-    if exe:
-        pytesseract.pytesseract.tesseract_cmd = exe
-    try:
-        return pytesseract.image_to_string(img)
-    except Exception as e:  # noqa: BLE001
-        raise ToolError(
-            "OCR failed (is the Tesseract engine installed?). Detail: " + str(e)
-        )
-
-
-def _find_tesseract_exe() -> Optional[str]:
-    candidates = [
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-    ]
-    for c in candidates:
-        if os.path.exists(c):
-            return c
-    return None
-
-
-def _trim_ocr(text: str, max_chars: int = 1500) -> str:
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    out = "\n".join(lines)
-    if len(out) > max_chars:
-        out = out[:max_chars] + "…"
-    return out
 
 
 @register("takeScreenshot")
@@ -158,49 +81,4 @@ def save_screenshot(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"result": f"Saved screenshot to {out_path}.", "path": str(out_path)}
 
 
-@register("analyzeScreenshot")
-def analyze_screenshot(args: Dict[str, Any]) -> Dict[str, Any]:
-    img = _capture()
-    try:
-        text = _run_ocr(img)
-    except ToolError as e:
-        return {"result": f"Screenshot captured, but OCR unavailable: {e.message}"}
-    return {
-        "result": "Screenshot analyzed via OCR.",
-        "text": _trim_ocr(text, int(args.get("max_chars", 1500))),
-    }
-
-
-@register("readScreen")
-def read_screen(args: Dict[str, Any]) -> Dict[str, Any]:
-    """OCR the active window and report its title + visible text."""
-    title = _active_window_title()
-    bbox = _active_window_bbox()
-    if bbox:
-        try:
-            img = _capture_region(bbox)
-        except ToolError:
-            img = _capture()
-    else:
-        img = _capture()
-    try:
-        text = _run_ocr(img)
-        visible = _trim_ocr(text, int(args.get("max_chars", 1500))) or "(no readable text)"
-    except ToolError as e:
-        return {
-            "result": f"Active window: {title or 'unknown'}. OCR unavailable: {e.message}",
-            "active_window": title,
-        }
-    return {
-        "result": f"Active window '{title or 'unknown'}' contains readable text.",
-        "active_window": title,
-        "text": visible,
-    }
-
-
-__all__ = [
-    "take_screenshot",
-    "save_screenshot",
-    "analyze_screenshot",
-    "read_screen",
-]
+__all__ = ["take_screenshot", "save_screenshot"]

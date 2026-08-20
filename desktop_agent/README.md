@@ -1,11 +1,17 @@
 # KAIRA Desktop Control Agent
 
 A local Python FastAPI service that gives KAIRA **JARVIS-style desktop control** —
-open apps, manage files, control volume, take screenshots, OCR the screen, automate a
-real Chromium browser, run code, read system stats, and more.
+open apps, manage files, control volume, take screenshots, adjust brightness, and more.
 
 > **This agent does NOT modify KAIRA's UI, personality, or chat system.** It is a pure
 > backend tool layer that KAIRA's existing Node bridge (`server.ts`) calls over HTTP.
+>
+> **Trimmed 2026-08-19** to cut voice-response latency: the Playwright desktop-browser
+> suite, coding assistance, system/GPU/temperature info, clipboard control, and
+> screenshot OCR were removed as unused-by-voice bulk (79 → 50 tools declared to
+> Gemini overall). Auto-start is still here as a backend-only handler — it's no
+> longer offered to Gemini, but the Settings panel's "Start with Windows" toggle
+> still calls it directly over HTTP.
 
 ---
 
@@ -15,8 +21,6 @@ real Chromium browser, run code, read system stats, and more.
 |---|---|---|
 | **Python 3.11+** | Runtime | Use the full interpreter path, e.g. `C:\Users\MSI\AppData\Local\Programs\Python\Python311\python.exe` |
 | **pip** | Install Python packages | Ships with Python |
-| **Chromium** (Playwright) | Browser automation | Installed via `playwright install chromium` |
-| **Tesseract OCR** *(optional)* | Screen text reading | Download from [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/wiki). Non-OCR tools work without it. |
 
 ---
 
@@ -28,13 +32,6 @@ cd C:\Users\MSI\Desktop\kaira-ai-assistant
 
 # 2. Install Python dependencies (use the full interpreter path if `python` shim is broken)
 "C:\Users\MSI\AppData\Local\Programs\Python\Python311\python.exe" -m pip install -r desktop_agent/requirements.txt
-
-# 3. Install the Playwright Chromium browser (one-time, ~130MB download)
-"C:\Users\MSI\AppData\Local\Programs\Python\Python311\python.exe" -m playwright install chromium
-
-# 4. (Optional) Install Tesseract OCR for screen-reading capabilities
-#    Download installer from: https://github.com/UB-Mannheim/tesseract/wiki
-#    Install to default path: C:\Program Files\Tesseract-OCR\
 ```
 
 ---
@@ -88,10 +85,7 @@ On error:
 | Tool | Description |
 |---|---|
 | `openWebsite` | Open a named site (YouTube, Gmail, GitHub…) or arbitrary URL in the default browser |
-| `searchWeb` | Search any engine (Google, YouTube, GitHub, DuckDuckGo, Bing) |
-| `searchYouTube` | Shortcut: search YouTube |
-| `searchGoogle` | Shortcut: search Google |
-| `searchGitHub` | Shortcut: search GitHub |
+| `searchWeb` | Search any engine via `engine` param (Google, YouTube, GitHub, DuckDuckGo, Bing) |
 
 ### 📁 Files
 | Tool | Description |
@@ -123,49 +117,55 @@ On error:
 | `closeWindow` | Close active or named window |
 | `switchApplication` | Switch to a named window, or Alt+Tab cycle |
 
-### 📋 Clipboard
-| Tool | Description |
-|---|---|
-| `copySelected` | Copy selected text (sends Ctrl+C, reads clipboard) |
-| `pasteClipboard` | Paste text into the active input |
-| `getClipboard` | Read current clipboard contents |
-| `clearClipboard` | Empty the clipboard |
-
-### 📸 Screenshot & Screen Reading
+### 📸 Screenshot
 | Tool | Description |
 |---|---|
 | `takeScreenshot` | Capture the full screen |
 | `saveScreenshot` | Save screenshot to Pictures/KairaScreenshots |
-| `analyzeScreenshot` | Screenshot + OCR to extract visible text |
-| `readScreen` | Read the active window's title + visible text via OCR |
 
-### 🌐 Browser Automation (Playwright)
+OCR (`analyzeScreenshot` / `readScreen`) was removed — it overlapped with
+Kaira's live multimodal screen vision (real-time frames while screen-share is
+on), which covers the same "what's on my screen" use case without a separate
+capture-then-OCR round trip.
+
+### 🔆 Brightness
 | Tool | Description |
 |---|---|
-| `browserOpen` / `browserNavigate` | Open a URL in the automation browser |
-| `browserOpenTab` | Open a new tab |
-| `browserCloseTab` | Close a tab |
-| `browserSearch` | Search in the automation browser |
-| `browserClick` | Click an element by selector or text |
-| `browserType` | Type text into the active element |
-| `browserFillForm` | Fill multiple form fields and optionally submit |
-| `browserGoBack` / `browserGoForward` | Navigate history |
-| `browserScroll` | Scroll the page up or down |
+| `brightnessUp` | Increase screen brightness by a step |
+| `brightnessDown` | Decrease screen brightness by a step |
+| `setBrightness` | Set brightness to an exact percentage |
 
-### 💻 Coding Assistance
+### 🚀 Auto-start (backend-only, not a voice tool)
 | Tool | Description |
 |---|---|
-| `createPythonFile` | Write a .py file |
-| `writeCodeFile` | Write a code file in any language |
-| `createProjectFolder` | Scaffold a project folder with subfolders |
-| `runPythonScript` | Execute a Python script (captured output) |
+| `enableAutoStart` | Add a Windows Run-key entry so KAIRA launches at login |
+| `disableAutoStart` | Remove that Run-key entry |
+| `getAutoStartStatus` | Check whether the entry currently exists |
 
-### 📊 System Information
-| Tool | Description |
-|---|---|
-| `systemInfo` | CPU, RAM, disk usage, uptime |
-| `gpuInfo` | NVIDIA GPU utilization, VRAM, temperature |
-| `temperatureInfo` | All available temperature sensors |
+Not declared to Gemini (removed 2026-08-19 to cut prompt bulk — Kaira never
+needed it via voice). Still registered and callable: the Settings panel's
+"Start with Windows" toggle calls it directly over HTTP.
+
+---
+
+## Removed (2026-08-19)
+
+To cut response latency, these tool families were removed outright along
+with their handler modules and dependencies:
+
+- **Playwright desktop-browser automation** (`desktopBrowser*`) — real
+  Chromium control (click/type/fill forms/tabs). Distinct from the in-app
+  holographic browser console (`browser*`), which is untouched.
+- **Coding assistance** (`createPythonFile`, `writeCodeFile`,
+  `createProjectFolder`, `runPythonScript`)
+- **System/GPU/temperature info** (`systemInfo`, `gpuInfo`,
+  `temperatureInfo`)
+- **Clipboard control** (`copySelected`, `pasteClipboard`, `getClipboard`,
+  `clearClipboard`)
+- **Screenshot OCR** (`analyzeScreenshot`, `readScreen`) — plain
+  `takeScreenshot` / `saveScreenshot` remain
+- **`searchYouTube` / `searchGoogle` / `searchGitHub`** — redundant with
+  `searchWeb(engine=...)`, which already covers all four engines
 
 ---
 
@@ -174,7 +174,6 @@ On error:
 - **Power actions** (shutdown, restart, sleep, lock) require a **two-step confirmation token**: KAIRA must first call `requestPowerAction` (which issues a single-use, 60-second token), ask the user out loud to confirm, then call `executePowerAction` with the token. Without a valid token, the action is refused.
 - **File deletions** go to the Recycle Bin by default (`send2trash`).
 - **File operations** are scoped to safe folders (Desktop, Documents, Downloads, Pictures, Music, Videos, home, project root). Paths outside these roots are rejected.
-- **Python script execution** has a configurable timeout (default 30s).
 
 ---
 
@@ -191,7 +190,7 @@ HTTP POST → localhost:8765/execute
         ↓
 Python FastAPI desktop_agent
         ↓
-pyautogui / pywin32 / psutil / Playwright / pytesseract / etc.
+pyautogui / pywin32 / pycaw / etc.
         ↓
 Windows Desktop
 ```

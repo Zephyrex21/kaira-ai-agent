@@ -14,11 +14,17 @@ const DESKTOP_AGENT_TIMEOUT = 25_000; // ms
 /**
  * The complete set of tool names routed to the Python desktop agent.
  * Kept in sync with desktop_agent/registry.py DESKTOP_TOOL_NAMES.
+ *
+ * Trimmed (2026-08-19): removed the Playwright desktopBrowser* suite,
+ * coding assistance, system/GPU/temperature info, clipboard control,
+ * Windows auto-start, and screenshot OCR (analyzeScreenshot/readScreen) —
+ * all unused-by-voice bulk that was adding to session setup latency.
+ * searchYouTube/searchGoogle/searchGitHub also dropped: searchWeb(engine=...)
+ * already covers them.
  */
 export const DESKTOP_TOOLS: ReadonlySet<string> = new Set([
   // applications / websites / search
-  "openApplication", "closeApplication", "openWebsite",
-  "searchWeb", "searchYouTube", "searchGoogle", "searchGitHub",
+  "openApplication", "closeApplication", "openWebsite", "searchWeb",
   // files
   "createFile", "readFile", "renameFile", "deleteFile", "moveFile",
   "openFolder", "listFiles", "searchFiles",
@@ -27,23 +33,10 @@ export const DESKTOP_TOOLS: ReadonlySet<string> = new Set([
   "requestPowerAction", "executePowerAction",
   // windows
   "minimizeWindow", "maximizeWindow", "closeWindow", "switchApplication",
-  // clipboard
-  "copySelected", "pasteClipboard", "getClipboard", "clearClipboard",
-  // screenshot / screen reading
-  "takeScreenshot", "saveScreenshot", "analyzeScreenshot", "readScreen",
-  // browser automation (Playwright — desktop-owned, separate from holographic UI)
-  "desktopBrowserOpen", "desktopBrowserNavigate", "desktopBrowserOpenTab",
-  "desktopBrowserCloseTab", "desktopBrowserSearch", "desktopBrowserClick",
-  "desktopBrowserType", "desktopBrowserFillForm", "desktopBrowserGoBack",
-  "desktopBrowserGoForward", "desktopBrowserScroll",
-  // coding assistance
-  "createPythonFile", "runPythonScript", "createProjectFolder", "writeCodeFile",
-  // system information
-  "systemInfo", "gpuInfo", "temperatureInfo",
+  // screenshot (basic capture only — OCR tools removed)
+  "takeScreenshot", "saveScreenshot",
   // brightness control (V2)
   "brightnessUp", "brightnessDown", "setBrightness",
-  // Windows auto-start management (V2)
-  "enableAutoStart", "disableAutoStart", "getAutoStartStatus",
 ]);
 
 /**
@@ -207,21 +200,21 @@ export async function ensureDesktopAgent(): Promise<void> {
     try {
       if (await isDesktopAgentAlive()) {
         desktopAgentVerified = true;
-        console.log("[Desktop Agent] Already running — 52 tools available.");
+        console.log(`[Desktop Agent] Already running — ${DESKTOP_TOOLS.size} tools available.`);
         return;
       }
       console.log("[Desktop Agent] Not detected. Auto-starting...");
       spawnDesktopAgent();
-      // A fresh process (imports pywin32/pycaw/playwright/etc.) can
-      // genuinely take longer than 20s on a slower machine or a cold
-      // filesystem cache — 45s gives it real room without the caller
+      // A fresh process (imports pywin32/pycaw/etc.) can genuinely take
+      // longer than 20s on a slower machine or a cold filesystem cache —
+      // 45s gives it real room without the caller
       // waiting indefinitely, and since this attempt is now shared, later
       // callers no longer restart the clock by spawning a duplicate.
       for (let i = 1; i <= 45; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         if (await isDesktopAgentAlive()) {
           desktopAgentVerified = true;
-          console.log(`[Desktop Agent] Online after ${i}s — 52 tools available.`);
+          console.log(`[Desktop Agent] Online after ${i}s — ${DESKTOP_TOOLS.size} tools available.`);
           return;
         }
       }

@@ -15,10 +15,7 @@ It can:
 - hold low-latency voice conversations with Gemini Live
 - execute structured tools through Gemini function calling
 - control Windows applications, windows, volume and system state
-- manage files and clipboard content
-- automate a Chromium browser with Playwright
-- capture screenshots and read visible screen content with OCR
-- create and run coding files/scripts
+- manage files and take screenshots
 - maintain persistent memories, reminders, todos and journal entries
 - connect to Google Calendar through OAuth
 - track model usage and maintain local operational logs
@@ -57,9 +54,7 @@ Google Gemini Live
       Python FastAPI agent
             │
             ├── Windows APIs
-            ├── Playwright
-            ├── PyAutoGUI / pywin32
-            ├── OCR
+            ├── PyAutoGUI / pywin32 / pycaw
             └── local filesystem
 ```
 
@@ -78,14 +73,10 @@ KAIRA exposes a structured tool registry covering:
 - applications and websites
 - windows and volume
 - files and folders
-- clipboard operations
-- screenshots and screen reading
-- browser automation
-- coding assistance
-- system and GPU information
+- screenshots
 - brightness and Windows auto-start
 
-The Python agent keeps shared Playwright/browser state in a controlled process-level state object and exposes a small HTTP API for tool execution.
+The Python agent keeps shared state in a controlled process-level state object and exposes a small HTTP API for tool execution. (The in-app holographic browser console runs its own separate Playwright process — `local-agent.js` — independent of this agent.)
 
 ### Persistent memory
 
@@ -104,9 +95,8 @@ Sensitive desktop operations are not treated as ordinary tool calls. Power actio
 | Backend | Node.js, Express, WebSocket |
 | AI | Google Gemini Live API |
 | Desktop agent | Python, FastAPI |
-| Browser automation | Playwright |
-| Desktop automation | PyAutoGUI, pywin32, psutil |
-| OCR | Tesseract / pytesseract |
+| In-app browser console | Playwright (`local-agent.js`, separate opt-in process) |
+| Desktop automation | PyAutoGUI, pywin32, pycaw |
 | Calendar | Google Calendar OAuth |
 | State | Local JSON-backed persistence |
 | Build | electron-builder |
@@ -120,7 +110,7 @@ Sensitive desktop operations are not treated as ordinary tool calls. Power actio
 │   └── lib/                    # Audio, wake word and client-side state
 ├── electron/                   # Electron main process, preload and splash screen
 ├── desktop_agent/              # Python FastAPI desktop-control service
-│   ├── tools_*.py              # Desktop, browser, file, system and coding tools
+│   ├── tools_*.py              # Desktop, file, screenshot and PC-control tools
 │   └── registry.py              # Tool registry and shared execution state
 ├── server.ts                   # Node orchestration server and Gemini Live session
 ├── server_tool_declarations.ts # Gemini function declarations
@@ -142,8 +132,6 @@ Sensitive desktop operations are not treated as ordinary tool calls. Power actio
 - Node.js 20+
 - Python 3.11+
 - A Google Gemini API key
-- Chromium for Playwright browser automation
-- Tesseract OCR is optional for screen-reading features
 
 ### Install
 
@@ -153,7 +141,6 @@ cd kaira-ai-agent
 
 npm install
 python -m pip install -r desktop_agent/requirements.txt
-python -m playwright install chromium
 ```
 
 Create `.env` from `.env.example` and configure the required credentials. KAIRA also supports supplying the Gemini key through its Settings UI; the key is stored locally and is never returned by the configuration endpoint.

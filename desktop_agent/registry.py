@@ -73,15 +73,20 @@ def register(name: str):
 
 # The set of all tool names KAIRA may route to this agent.
 # Kept in sync with the functionDeclarations added in server.ts.
+#
+# Trimmed (2026-08-19) to cut response latency: removed the Playwright
+# desktop-browser suite, coding assistance, system/GPU/temperature info,
+# clipboard control, Windows auto-start, and the OCR screenshot tools
+# (analyzeScreenshot/readScreen) as unused-by-voice bulk. Their handler
+# modules were deleted outright rather than left dead. searchYouTube/
+# searchGoogle/searchGitHub were also dropped since searchWeb(engine=...)
+# already covers them.
 DESKTOP_TOOL_NAMES = [
     # applications / websites / search
     "openApplication",
     "closeApplication",
     "openWebsite",
     "searchWeb",
-    "searchYouTube",
-    "searchGoogle",
-    "searchGitHub",
     # files
     "createFile",
     "readFile",
@@ -103,45 +108,13 @@ DESKTOP_TOOL_NAMES = [
     "maximizeWindow",
     "closeWindow",
     "switchApplication",
-    # clipboard
-    "copySelected",
-    "pasteClipboard",
-    "getClipboard",
-    "clearClipboard",
-    # screenshot / screen reading
+    # screenshot (basic capture only — OCR tools removed)
     "takeScreenshot",
     "saveScreenshot",
-    "analyzeScreenshot",
-    "readScreen",
-    # browser automation (Playwright — desktop-owned, separate from holographic UI)
-    "desktopBrowserOpen",
-    "desktopBrowserNavigate",
-    "desktopBrowserOpenTab",
-    "desktopBrowserCloseTab",
-    "desktopBrowserSearch",
-    "desktopBrowserClick",
-    "desktopBrowserType",
-    "desktopBrowserFillForm",
-    "desktopBrowserGoBack",
-    "desktopBrowserGoForward",
-    "desktopBrowserScroll",
-    # coding assistance
-    "createPythonFile",
-    "runPythonScript",
-    "createProjectFolder",
-    "writeCodeFile",
-    # system information
-    "systemInfo",
-    "gpuInfo",
-    "temperatureInfo",
     # brightness control (V2)
     "brightnessUp",
     "brightnessDown",
     "setBrightness",
-    # Windows auto-start management (V2)
-    "enableAutoStart",
-    "disableAutoStart",
-    "getAutoStartStatus",
 ]
 
 
@@ -157,11 +130,12 @@ _MODULE_NAMES = [
     "tools_files",
     "tools_pc",
     "tools_windows",
-    "tools_clipboard",
     "tools_screenshot",
-    "tools_browser",
-    "tools_coding",
-    "tools_system",
+    # tools_startup is kept registered (not deleted) even though its tools
+    # are no longer in DESKTOP_TOOL_NAMES / offered to Gemini — the Settings
+    # panel's "Start with Windows" toggle calls enableAutoStart/
+    # disableAutoStart directly via callDesktopAgent(), bypassing the model
+    # entirely, so the handler still needs to exist and be registered.
     "tools_startup",
 ]
 
