@@ -13,10 +13,17 @@ export default defineConfig(() => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modify - file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // .kaira-data/ and logs/ are excluded even when watching is on: the server
+      // writes to .kaira-data on every session/turn (usage, settings, memory,
+      // reminders, etc.), and without this a write there triggers a full page
+      // reload -- which kills the live WebSocket and closes the Gemini session
+      // mid-conversation. See server_paths.ts for the full story.
+      watch: process.env.DISABLE_HMR === 'true' ? null : {
+        ignored: ['**/.kaira-data/**', '**/logs/**'],
+      },
     },
   };
 });

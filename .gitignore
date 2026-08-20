@@ -42,3 +42,8 @@ logs/
 .claude/
 memories.json
 calendar_tokens.json
+
+# Per-user data (dev default — see server_paths.ts). Contains secrets.json
+# (the Gemini API key, if entered via Settings) plus settings/usage/memory/
+# reminders/todos/journal. Also excluded from Vite's watcher (vite.config.ts).
+.kaira-data/
